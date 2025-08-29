@@ -201,7 +201,7 @@ const AudioAnalyzer = ({
     return 0;
   }, []);
 
-  // 主分析循环
+  // 主分析循环 - 移除依赖项以避免无限重新渲染
   const analyzeAudio = useCallback(() => {
     if (
       !analyzerRef.current ||
@@ -241,17 +241,7 @@ const AudioAnalyzer = ({
 
     // 继续分析
     animationFrameRef.current = requestAnimationFrame(analyzeAudio);
-  }, [
-    playState,
-    calculateRMS,
-    calculateSpectralCentroid,
-    calculateSpectralFlux,
-    getDominantFrequencyRange,
-    detectBeat,
-    detectTransient,
-    onBeatDetected,
-    onTransientDetected,
-  ]);
+  }, [playState]);
 
   // 开始/停止分析
   useEffect(() => {
@@ -296,7 +286,7 @@ const AudioAnalyzer = ({
         audioContextRef.current.close();
       }
     };
-  }, [audioElement, initializeAudioAnalysis]);
+  }, [audioElement]); // 移除initializeAudioAnalysis依赖，避免循环
 
   // 导出分析器控制方法到全局（用于调试）
   useEffect(() => {

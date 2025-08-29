@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AUDIO_PLAYLIST, AUDIO_CONFIG, PlayMode, PlayState } from '../constants/playlist';
 import type { AudioTrack } from '../constants/playlist';
 
@@ -265,14 +265,14 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     };
   }, []);
 
-  // 创建控制器对象
-  const controls: AudioControls = {
+  // 创建稳定的控制器对象引用
+  const controls = useMemo<AudioControls>(() => ({
     togglePlayPause,
     nextTrack: playNext,
     prevTrack: playPrev,
     getCurrentTrack,
     getPlayState: () => playState,
-  };
+  }), [togglePlayPause, playNext, playPrev, getCurrentTrack, playState]);
 
   // 将控制器传递给父组件
   useEffect(() => {

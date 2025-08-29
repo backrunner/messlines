@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import type { AudioTrack } from '../constants/playlist';
 import { PlayState } from '../constants/playlist';
 import AudioManager from './AudioManager';
-import LineBallAnimation from './LineBallAnimation';
+import PureAudioVisualizer from './PureAudioVisualizer';
 import UserInteractionController from './UserInteractionController';
 import PauseIndicator from './PauseIndicator';
 import AudioAnalyzer from './AudioAnalyzer';
@@ -22,13 +22,10 @@ const AudioController = () => {
   const [audioControls, setAudioControls] = useState<AudioControls | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   
-  // 音频反应回调的引用
-  const audioReactiveRef = useRef<{
-    onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => void;
-    onBeat: (strength: number) => void;
-  }>({
-    onTransient: () => {},
-    onBeat: () => {},
+  // 音频反应回调的引用 - 使用稳定的引用对象
+  const audioReactiveCallbacks = useRef({
+    onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => {},
+    onBeat: (strength: number) => {},
   });
 
   // 处理音轨变化
@@ -54,12 +51,12 @@ const AudioController = () => {
 
   // 音频瞬态检测回调
   const handleTransientDetected = useCallback((intensity: number, frequency: 'low' | 'mid' | 'high') => {
-    audioReactiveRef.current.onTransient(intensity, frequency);
+    audioReactiveCallbacks.current.onTransient(intensity, frequency);
   }, []);
 
   // 音频节拍检测回调
   const handleBeatDetected = useCallback((strength: number) => {
-    audioReactiveRef.current.onBeat(strength);
+    audioReactiveCallbacks.current.onBeat(strength);
   }, []);
 
   // 计算动画是否应该暂停
@@ -96,13 +93,13 @@ const AudioController = () => {
       {/* 暂停指示器 - 左上角显示暂停图标 */}
       <PauseIndicator playState={playState} />
       
-      {/* 线条球动画 - 背景数字会显示当前音轨序号并响应音频 */}
-      <LineBallAnimation
+      {/* 纯JavaScript音频可视化器 - 高性能，无React重新渲染 */}
+      <PureAudioVisualizer
         currentTrack={currentTrack}
         currentTrackIndex={currentTrackIndex}
         playState={playState}
         isAnimationPaused={isAnimationPaused}
-        onAudioReactive={audioReactiveRef.current}
+        audioReactiveCallbacks={audioReactiveCallbacks}
       />
     </>
   );
