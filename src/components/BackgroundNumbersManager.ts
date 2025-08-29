@@ -197,24 +197,35 @@ class BackgroundNumbersManager {
     let lastOutlineUpdate = 0;
     let lastFadeUpdate = 0;
     let lastEmptyPositionUpdate = 0;
+    
+    // 随机化初始间隔，避免所有更新同时触发
+    let outlineInterval = 7000 + Math.random() * 3000; // 7-10秒随机间隔
+    let fadeInterval = 2500 + Math.random() * 2000;    // 2.5-4.5秒随机间隔
+    let emptyPositionInterval = 9000 + Math.random() * 4000; // 9-13秒随机间隔
 
     const update = (now: number) => {
-      // 每8秒随机切换轮廓/填充状态
-      if (now - lastOutlineUpdate > 8000) {
+      // 随机间隔的轮廓切换
+      if (now - lastOutlineUpdate > outlineInterval) {
         this.randomOutlineUpdate();
         lastOutlineUpdate = now;
+        // 重新随机化下次间隔
+        outlineInterval = 6000 + Math.random() * 4000; // 6-10秒
       }
 
-      // 每3秒随机透明度变化
-      if (now - lastFadeUpdate > 3000) {
+      // 随机间隔的透明度变化
+      if (now - lastFadeUpdate > fadeInterval) {
         this.randomFadeUpdate();
         lastFadeUpdate = now;
+        // 重新随机化下次间隔
+        fadeInterval = 2000 + Math.random() * 3000; // 2-5秒
       }
 
-      // 每10秒随机切换空位置
-      if (now - lastEmptyPositionUpdate > 10000) {
+      // 随机间隔的空位置切换
+      if (now - lastEmptyPositionUpdate > emptyPositionInterval) {
         this.randomEmptyPositionUpdate();
         lastEmptyPositionUpdate = now;
+        // 重新随机化下次间隔
+        emptyPositionInterval = 8000 + Math.random() * 6000; // 8-14秒
       }
 
       this.animationFrameId = requestAnimationFrame(update);
@@ -268,8 +279,33 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 优化透明度范围，确保数字始终可见
-      zeroState.opacity = zeroState.opacity > 0.2 ? 0.1 : 0.4;
+      // 增加透明度变化的随机性和多样性
+      const opacityPattern = Math.random();
+      
+      if (opacityPattern < 0.4) {
+        // 40%几率：简单明暗切换
+        zeroState.opacity = zeroState.opacity > 0.25 ? 0.08 + Math.random() * 0.12 : 0.3 + Math.random() * 0.2;
+      } else if (opacityPattern < 0.7) {
+        // 30%几率：渐进式变化
+        const currentOpacity = zeroState.opacity;
+        const direction = Math.random() < 0.5 ? 1 : -1;
+        const change = (Math.random() * 0.15 + 0.05) * direction;
+        zeroState.opacity = Math.max(0.05, Math.min(0.6, currentOpacity + change));
+      } else if (opacityPattern < 0.9) {
+        // 20%几率：随机区间设置
+        const randomZone = Math.random();
+        if (randomZone < 0.33) {
+          zeroState.opacity = 0.05 + Math.random() * 0.15; // 低区间
+        } else if (randomZone < 0.66) {
+          zeroState.opacity = 0.2 + Math.random() * 0.2; // 中区间
+        } else {
+          zeroState.opacity = 0.4 + Math.random() * 0.2; // 高区间
+        }
+      } else {
+        // 10%几率：极端值
+        zeroState.opacity = Math.random() < 0.5 ? 0.02 + Math.random() * 0.08 : 0.5 + Math.random() * 0.3;
+      }
+
       this.updateZeroDisplay(key);
     });
   }
@@ -412,7 +448,11 @@ class BackgroundNumbersManager {
   }
 
   private applyTransientEffect(intensity: number, frequency: 'low' | 'mid' | 'high') {
-    const changeCount = Math.floor(intensity * 30) + 5;
+    // 添加随机性：瞬态强度影响变化数量，但加入随机波动
+    const baseChangeCount = Math.floor(intensity * 30) + 5;
+    const randomVariation = Math.floor(Math.random() * 10) - 5; // -5到+5的随机变化
+    const changeCount = Math.max(3, baseChangeCount + randomVariation);
+    
     // 只对非空位置应用瞬态效果
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
 
@@ -431,16 +471,50 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 设置快速过渡
-      zeroState.element.style.transition = 'color 0.1s ease-out, -webkit-text-stroke 0.1s ease-out, opacity 0.1s ease-out';
+      // 随机化过渡时间，创造更自然的效果
+      const transitionDuration = 0.08 + Math.random() * 0.04; // 0.08-0.12s之间随机
+      zeroState.element.style.transition = `color ${transitionDuration}s ease-out, -webkit-text-stroke ${transitionDuration}s ease-out, opacity ${transitionDuration}s ease-out`;
 
+      // 根据频率类型应用不同的随机效果
+      const randomFactor = Math.random(); // 0-1的随机因子
+      
       if (frequency === 'low') {
-        zeroState.isOutline = !zeroState.isOutline;
+        // 低频：偏向轮廓切换，但加入透明度随机变化
+        if (randomFactor < 0.7) {
+          zeroState.isOutline = !zeroState.isOutline;
+        }
+        if (randomFactor < 0.4) {
+          // 40%几率同时改变透明度
+          zeroState.opacity = 0.05 + Math.random() * 0.35; // 0.05-0.4之间随机
+        }
       } else if (frequency === 'high') {
-        zeroState.opacity = zeroState.opacity > 0.15 ? 0.05 : 0.6;
+        // 高频：主要影响透明度，更加闪烁
+        const opacityRandomness = Math.random() * 0.3; // 0-0.3的随机加成
+        if (zeroState.opacity > 0.15) {
+          zeroState.opacity = Math.max(0.02, 0.05 - opacityRandomness); // 变暗，但有随机性
+        } else {
+          zeroState.opacity = Math.min(0.8, 0.6 + opacityRandomness); // 变亮，但有随机性
+        }
+        
+        // 30%几率同时切换轮廓
+        if (randomFactor < 0.3) {
+          zeroState.isOutline = !zeroState.isOutline;
+        }
       } else {
-        zeroState.isOutline = !zeroState.isOutline;
-        zeroState.opacity = zeroState.opacity > 0.15 ? 0.1 : 0.5;
+        // 中频：混合效果，最大随机性
+        if (randomFactor < 0.6) {
+          zeroState.isOutline = !zeroState.isOutline;
+        }
+        
+        // 透明度变化更加随机
+        const opacityChoice = Math.random();
+        if (opacityChoice < 0.33) {
+          zeroState.opacity = 0.05 + Math.random() * 0.15; // 低透明度区间
+        } else if (opacityChoice < 0.66) {
+          zeroState.opacity = 0.25 + Math.random() * 0.25; // 中透明度区间
+        } else {
+          zeroState.opacity = 0.5 + Math.random() * 0.3; // 高透明度区间
+        }
       }
 
       this.updateZeroDisplay(key);
@@ -448,7 +522,11 @@ class BackgroundNumbersManager {
   }
 
   private applyBeatEffect(strength: number) {
-    const changeCount = Math.floor(strength * 25) + 8;
+    // 添加随机性：节拍强度影响基础变化数量，再加上随机波动
+    const baseChangeCount = Math.floor(strength * 25) + 8;
+    const randomVariation = Math.floor(Math.random() * 12) - 6; // -6到+6的随机变化
+    const changeCount = Math.max(5, baseChangeCount + randomVariation);
+    
     // 只对非空位置应用节拍效果
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
 
@@ -467,11 +545,64 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 设置快速过渡
-      zeroState.element.style.transition = 'color 0.1s ease-out, -webkit-text-stroke 0.1s ease-out, opacity 0.1s ease-out';
+      // 随机化过渡时间，创造更有机的节拍效果
+      const transitionDuration = 0.08 + Math.random() * 0.08; // 0.08-0.16s之间随机
+      const easingTypes = ['ease-out', 'ease-in-out', 'ease-in', 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'];
+      const randomEasing = easingTypes[Math.floor(Math.random() * easingTypes.length)];
+      zeroState.element.style.transition = `color ${transitionDuration}s ${randomEasing}, -webkit-text-stroke ${transitionDuration}s ${randomEasing}, opacity ${transitionDuration}s ${randomEasing}`;
 
-      // 增加透明度营造闪烁效果
-      zeroState.opacity = Math.min(0.8, zeroState.opacity + strength * 0.5);
+      // 创建多种随机的节拍反应模式
+      const beatPattern = Math.random();
+      const intensityMultiplier = 0.3 + Math.random() * 0.7; // 0.3-1.0的随机强度倍数
+      
+      if (beatPattern < 0.4) {
+        // 模式1：纯透明度闪烁（40%几率）
+        const opacityBoost = strength * intensityMultiplier * 0.6;
+        const randomBoost = Math.random() * 0.3; // 额外随机增强
+        zeroState.opacity = Math.min(0.9, zeroState.opacity + opacityBoost + randomBoost);
+        
+      } else if (beatPattern < 0.7) {
+        // 模式2：透明度+轮廓切换（30%几率）
+        const opacityBoost = strength * intensityMultiplier * 0.4;
+        const randomBoost = Math.random() * 0.25;
+        zeroState.opacity = Math.min(0.85, zeroState.opacity + opacityBoost + randomBoost);
+        
+        // 50%几率切换轮廓
+        if (Math.random() < 0.5) {
+          zeroState.isOutline = !zeroState.isOutline;
+        }
+        
+      } else if (beatPattern < 0.85) {
+        // 模式3：随机透明度设置（15%几率）
+        const randomOpacity = Math.random();
+        if (randomOpacity < 0.3) {
+          zeroState.opacity = 0.6 + Math.random() * 0.3; // 高亮
+        } else if (randomOpacity < 0.6) {
+          zeroState.opacity = 0.3 + Math.random() * 0.3; // 中等
+        } else {
+          zeroState.opacity = 0.1 + Math.random() * 0.2; // 暗淡
+        }
+        
+      } else {
+        // 模式4：极端反应（15%几率）- 创造戏剧性效果
+        if (Math.random() < 0.5) {
+          // 极亮
+          zeroState.opacity = 0.8 + Math.random() * 0.2;
+          zeroState.isOutline = Math.random() < 0.3; // 30%几率变轮廓
+        } else {
+          // 极暗后快速恢复
+          zeroState.opacity = 0.02 + Math.random() * 0.08;
+          
+          // 延迟恢复效果
+          setTimeout(() => {
+            if (this.zeroGrid[key]) {
+              this.zeroGrid[key].opacity = 0.4 + Math.random() * 0.3;
+              this.updateZeroDisplay(key);
+            }
+          }, 50 + Math.random() * 100); // 50-150ms延迟
+        }
+      }
+
       this.updateZeroDisplay(key);
     });
   }
