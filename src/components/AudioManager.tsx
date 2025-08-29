@@ -5,6 +5,15 @@ import type { AudioTrack } from '../constants/playlist';
 interface AudioManagerProps {
   onTrackChange?: (track: AudioTrack, trackIndex: number) => void;
   onPlayStateChange?: (state: PlayState) => void;
+  onControlsReady?: (controls: AudioControls) => void;
+}
+
+interface AudioControls {
+  togglePlayPause: () => void;
+  nextTrack: () => void;
+  prevTrack: () => void;
+  getCurrentTrack: () => AudioTrack | null;
+  getPlayState: () => PlayState;
 }
 
 // Fisher-Yates 洗牌算法
@@ -17,7 +26,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const AudioManager = ({ onTrackChange, onPlayStateChange }: AudioManagerProps) => {
+const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady }: AudioManagerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
@@ -161,6 +170,20 @@ const AudioManager = ({ onTrackChange, onPlayStateChange }: AudioManagerProps) =
     playTrack(nextIndex);
   }, [shuffledPlaylist, currentTrackIndex, playTrack, onPlayStateChange]);
 
+  // 播放上一首
+  const playPrev = useCallback(() => {
+    if (shuffledPlaylist.length === 0) return;
+
+    let prevIndex = currentTrackIndex - 1;
+
+    // 如果到了列表开头，跳到最后一首
+    if (prevIndex < 0) {
+      prevIndex = shuffledPlaylist.length - 1;
+    }
+
+    playTrack(prevIndex);
+  }, [shuffledPlaylist, currentTrackIndex, playTrack]);
+
   // 停止播放
   const stop = useCallback(() => {
     if (!audioRef.current) return;
@@ -241,6 +264,20 @@ const AudioManager = ({ onTrackChange, onPlayStateChange }: AudioManagerProps) =
     };
   }, []);
 
+  // 创建控制器对象
+  const controls: AudioControls = {
+    togglePlayPause,
+    nextTrack: playNext,
+    prevTrack: playPrev,
+    getCurrentTrack,
+    getPlayState: () => playState,
+  };
+
+  // 将控制器传递给父组件
+  useEffect(() => {
+    onControlsReady?.(controls);
+  }, [onControlsReady, controls]);
+
   // 导出控制方法给外部使用
   useEffect(() => {
     // 将控制方法挂载到全局，方便调试和外部控制
@@ -249,13 +286,14 @@ const AudioManager = ({ onTrackChange, onPlayStateChange }: AudioManagerProps) =
         play: () => playTrack(currentTrackIndex),
         stop,
         next: playNext,
+        prev: playPrev,
         togglePlayPause,
         getCurrentTrack,
         getPlayState: () => playState,
         getPlaylist: () => shuffledPlaylist,
       };
     }
-  }, [playTrack, currentTrackIndex, stop, playNext, togglePlayPause, getCurrentTrack, playState, shuffledPlaylist]);
+  }, [playTrack, currentTrackIndex, stop, playNext, playPrev, togglePlayPause, getCurrentTrack, playState, shuffledPlaylist]);
 
   return (
     <audio

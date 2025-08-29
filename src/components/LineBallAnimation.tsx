@@ -39,9 +39,10 @@ interface LineBallAnimationProps {
   currentTrack?: AudioTrack | null;
   currentTrackIndex?: number;
   playState?: PlayState;
+  isAnimationPaused?: boolean;
 }
 
-const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED }: LineBallAnimationProps) => {
+const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED, isAnimationPaused = false }: LineBallAnimationProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const linesRef = useRef<FlyingLine[]>([]);
   const centerLinesRef = useRef<FlyingLine[]>([]); // Lines in the center ball
@@ -52,10 +53,24 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
   const [circleVisible, setCircleVisible] = useState(false);
   const [circleScale, setCircleScale] = useState(1);
   const [gradientOffset, setGradientOffset] = useState(40); // Dynamic gradient position (20%-60% range)
-  const [zeroStates, setZeroStates] = useState<{[key: string]: {isOutline: boolean, opacity: number}}>({}); // Fixed states for zeros
+  const [zeroStates, setZeroStates] = useState<{ [key: string]: { isOutline: boolean; opacity: number } }>({}); // Fixed states for zeros
   const [numbersVisible, setNumbersVisible] = useState(false); // Control numbers visibility based on music playback
   const dimensionsRef = useRef({ width: 0, height: 0 });
-  const zeroGridRef = useRef<{[key: string]: {isOutline: boolean, opacity: number}}>({}); // Persistent zero grid
+  const zeroGridRef = useRef<{ [key: string]: { isOutline: boolean; opacity: number } }>({}); // Persistent zero grid
+  const isPausedRef = useRef(isAnimationPaused);
+
+  // Sync isAnimationPaused prop with a ref to avoid stale closures in the animation loop
+  useEffect(() => {
+    isPausedRef.current = isAnimationPaused;
+
+    // When resuming the animation, reset the last update time for all lines to prevent jumping
+    if (!isAnimationPaused) {
+      const now = Date.now();
+      linesRef.current.forEach((line) => {
+        line.lastUpdateTime = now;
+      });
+    }
+  }, [isAnimationPaused]);
 
   // Animation constants
   const CIRCLE_RADIUS = 120; // Standard circle radius for center
@@ -313,7 +328,7 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
 
     // Calculate new position (bounce well inward to ensure staying within circle)
     const bounceDistance = CIRCLE_RADIUS * (0.5 + Math.random() * 0.3); // Reduced from 0.6-0.9 to 0.5-0.8
-      return {
+    return {
       x: centerX + finalX * bounceDistance,
       y: centerY + finalY * bounceDistance,
     };
@@ -548,7 +563,7 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
           const centerX = dimensionsRef.current.width / 2;
           const centerY = dimensionsRef.current.height / 2;
           const targetPoint = {
-                x: centerX + (Math.random() - 0.5) * CIRCLE_RADIUS * 0.8,
+            x: centerX + (Math.random() - 0.5) * CIRCLE_RADIUS * 0.8,
             y: centerY + (Math.random() - 0.5) * CIRCLE_RADIUS * 0.8,
           };
           const segment = generatePathSegment(newPosition, targetPoint, 0.3);
@@ -766,7 +781,7 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
       const fadeInTimer = setTimeout(() => {
         setNumbersVisible(true);
       }, 500); // 0.5秒延迟淡入
-      
+
       return () => clearTimeout(fadeInTimer);
     } else {
       // 音乐停止或暂停时，立即开始淡出
@@ -965,6 +980,12 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
 
     // Animation loop
     const animate = () => {
+      // Use the ref to check the current pause state, avoiding the stale closure issue
+      if (isPausedRef.current) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
       const now = Date.now();
 
       // Update breathing gradient effect
@@ -975,12 +996,13 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
       setGradientOffset(newGradientOffset);
 
       // Slowly and randomly change zeros between outline/filled (every 8 seconds)
-      if (now % 8000 < 16) { // Every 8 seconds
+      if (now % 8000 < 16) {
+        // Every 8 seconds
         const allKeys = Object.keys(zeroGridRef.current);
         if (allKeys.length > 0) {
           const changeCount = Math.floor(Math.random() * 8) + 3; // 3-10 zeros change at once
           const keysToChange: string[] = [];
-          
+
           for (let i = 0; i < changeCount && i < allKeys.length; i++) {
             let randomKey;
             do {
@@ -988,22 +1010,23 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
             } while (keysToChange.includes(randomKey));
             keysToChange.push(randomKey);
           }
-          
-          keysToChange.forEach(key => {
+
+          keysToChange.forEach((key) => {
             zeroGridRef.current[key].isOutline = !zeroGridRef.current[key].isOutline;
           });
-          
+
           setZeroStates({ ...zeroGridRef.current });
         }
       }
 
       // Random fade in/out effect (every 3 seconds)
-      if (now % 3000 < 16) { // Every 3 seconds
+      if (now % 3000 < 16) {
+        // Every 3 seconds
         const allKeys = Object.keys(zeroGridRef.current);
         if (allKeys.length > 0) {
           const fadeCount = Math.floor(Math.random() * 12) + 5; // 5-16 zeros fade
           const keysToFade: string[] = [];
-          
+
           for (let i = 0; i < fadeCount && i < allKeys.length; i++) {
             let randomKey;
             do {
@@ -1011,13 +1034,13 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
             } while (keysToFade.includes(randomKey));
             keysToFade.push(randomKey);
           }
-          
-          keysToFade.forEach(key => {
+
+          keysToFade.forEach((key) => {
             const currentOpacity = zeroGridRef.current[key].opacity;
             // Toggle between visible (0.3) and nearly invisible (0.05)
             zeroGridRef.current[key].opacity = currentOpacity > 0.15 ? 0.05 : 0.3;
           });
-          
+
           setZeroStates({ ...zeroGridRef.current });
         }
       }
@@ -1080,50 +1103,50 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
     const fontSize = 120; // Super large font size
     const spacing = fontSize * 0.8; // Spacing between zeros
     const overflow = fontSize; // Overflow distance for full coverage
-    
+
     // Calculate grid with overflow in all directions
     const startX = -overflow;
     const endX = width + overflow;
     const startY = -overflow;
     const endY = height + overflow;
-    
+
     const cols = Math.ceil((endX - startX) / spacing);
     const rows = Math.ceil((endY - startY) / spacing);
-    
+
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * spacing;
         const y = startY + row * spacing;
         const zeroKey = `${row}-${col}`;
-        
+
         // Initialize persistent state if not exists
         if (!(zeroKey in zeroGridRef.current)) {
           zeroGridRef.current[zeroKey] = {
             isOutline: Math.random() < 0.5,
-            opacity: 0.3
+            opacity: 0.3,
           };
         }
-        
+
         const zeroState = zeroStates[zeroKey] || zeroGridRef.current[zeroKey];
-        
+
         // Calculate gradient-following color based on vertical position
         const normalizedY = (y - startY) / (endY - startY); // 0 (top) to 1 (bottom)
         const gradientPosition = normalizedY; // 0 at top, 1 at bottom
-        
+
         // Interpolate color based on gradient position
         // Bottom: lighter gray (#333), Top: darker gray (#111)
         const bottomGray = 0x33; // #333
-        const topGray = 0x11;    // #111
+        const topGray = 0x11; // #111
         const grayValue = Math.round(topGray + (bottomGray - topGray) * gradientPosition);
         const hexGray = grayValue.toString(16).padStart(2, '0');
         const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
-        
+
         // 显示当前播放音频的序号，如果没有音频则显示0
         const displayNumber = currentTrack ? currentTrackIndex.toString() : '0';
-        
+
         // 根据音乐播放状态和 numbersVisible 来计算最终透明度
         const finalOpacity = numbersVisible ? zeroState.opacity : 0;
-        
+
         zeros.push(
           <div
             key={`zero-${zeroKey}`}
@@ -1140,7 +1163,7 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
               pointerEvents: 'none',
               opacity: finalOpacity,
               zIndex: 1,
-              transition: 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out'
+              transition: 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out',
             }}
           >
             {displayNumber}
@@ -1148,33 +1171,33 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
         );
       }
     }
-    
+
     return zeros;
   };
 
   return (
     <div
       style={{
-      position: 'fixed', 
-      top: 0, 
-      left: 0, 
-      width: '100%', 
-      height: '100%', 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
         background: `linear-gradient(to top, #0a0a0a ${gradientOffset}%, #000000)`, // Deeper dynamic breathing gradient
         overflow: 'hidden',
       }}
     >
       {/* Background zeros pattern */}
       {dimensions.width && dimensions.height && generateBackgroundZeros()}
-      
+
       <svg
         ref={svgRef}
         width="100%"
         height="100%"
-        style={{ 
+        style={{
           display: 'block',
           position: 'relative',
-          zIndex: 2
+          zIndex: 2,
         }}
       />
     </div>
