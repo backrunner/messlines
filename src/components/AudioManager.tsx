@@ -6,6 +6,7 @@ interface AudioManagerProps {
   onTrackChange?: (track: AudioTrack, trackIndex: number) => void;
   onPlayStateChange?: (state: PlayState) => void;
   onControlsReady?: (controls: AudioControls) => void;
+  onAudioElementReady?: (audioElement: HTMLAudioElement | null) => void;
 }
 
 interface AudioControls {
@@ -26,7 +27,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady }: AudioManagerProps) => {
+const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAudioElementReady }: AudioManagerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
@@ -277,6 +278,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady }: Aud
   useEffect(() => {
     onControlsReady?.(controls);
   }, [onControlsReady, controls]);
+
+  // 将音频元素传递给父组件
+  useEffect(() => {
+    onAudioElementReady?.(audioRef.current);
+  }, [onAudioElementReady]);
 
   // 导出控制方法给外部使用
   useEffect(() => {

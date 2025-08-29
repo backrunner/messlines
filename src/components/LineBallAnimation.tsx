@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AudioTrack } from '../constants/playlist';
 import { PlayState } from '../constants/playlist';
 
@@ -40,9 +40,13 @@ interface LineBallAnimationProps {
   currentTrackIndex?: number;
   playState?: PlayState;
   isAnimationPaused?: boolean;
+  onAudioReactive?: {
+    onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => void;
+    onBeat: (strength: number) => void;
+  };
 }
 
-const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED, isAnimationPaused = false }: LineBallAnimationProps) => {
+const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED, isAnimationPaused = false, onAudioReactive }: LineBallAnimationProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const linesRef = useRef<FlyingLine[]>([]);
   const centerLinesRef = useRef<FlyingLine[]>([]); // Lines in the center ball
@@ -55,9 +59,139 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
   const [gradientOffset, setGradientOffset] = useState(40); // Dynamic gradient position (20%-60% range)
   const [zeroStates, setZeroStates] = useState<{ [key: string]: { isOutline: boolean; opacity: number } }>({}); // Fixed states for zeros
   const [numbersVisible, setNumbersVisible] = useState(false); // Control numbers visibility based on music playback
+  const [audioReactiveState, setAudioReactiveState] = useState({
+    transientActive: false,
+    beatActive: false,
+    transientIntensity: 0,
+    beatStrength: 0,
+    dominantFrequency: 'mid' as 'low' | 'mid' | 'high',
+  });
   const dimensionsRef = useRef({ width: 0, height: 0 });
   const zeroGridRef = useRef<{ [key: string]: { isOutline: boolean; opacity: number } }>({}); // Persistent zero grid
   const isPausedRef = useRef(isAnimationPaused);
+  
+  // 音频反应效果的 refs
+  const transientEffectRef = useRef<NodeJS.Timeout | null>(null);
+  const beatEffectRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 音频瞬态反应处理
+  const handleTransient = useCallback((intensity: number, frequency: 'low' | 'mid' | 'high') => {
+    // 清除之前的瞬态效果
+    if (transientEffectRef.current) {
+      clearTimeout(transientEffectRef.current);
+    }
+
+    // 设置瞬态状态
+    setAudioReactiveState(prev => ({
+      ...prev,
+      transientActive: true,
+      transientIntensity: intensity,
+      dominantFrequency: frequency,
+    }));
+
+    // 根据瞬态强度触发数字快速切换
+    const changeCount = Math.floor(intensity * 30) + 5; // 5-35 个数字同时变化
+    const allKeys = Object.keys(zeroGridRef.current);
+    
+    if (allKeys.length > 0) {
+      const keysToChange: string[] = [];
+      
+      // 选择要变化的数字
+      for (let i = 0; i < changeCount && i < allKeys.length; i++) {
+        let randomKey;
+        do {
+          randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+        } while (keysToChange.includes(randomKey));
+        keysToChange.push(randomKey);
+      }
+      
+      // 根据频率类型应用不同的效果
+      keysToChange.forEach(key => {
+        const currentState = zeroGridRef.current[key];
+        
+        if (frequency === 'low') {
+          // 低频：切换填充/轮廓状态
+          currentState.isOutline = !currentState.isOutline;
+        } else if (frequency === 'high') {
+          // 高频：调整透明度
+          currentState.opacity = currentState.opacity > 0.15 ? 0.05 : 0.6;
+        } else {
+          // 中频：同时切换两种状态
+          currentState.isOutline = !currentState.isOutline;
+          currentState.opacity = currentState.opacity > 0.15 ? 0.1 : 0.5;
+        }
+      });
+      
+      setZeroStates({ ...zeroGridRef.current });
+    }
+
+    // 设置瞬态效果持续时间（根据强度调整）
+    const effectDuration = Math.max(100, intensity * 300);
+    transientEffectRef.current = setTimeout(() => {
+      setAudioReactiveState(prev => ({
+        ...prev,
+        transientActive: false,
+        transientIntensity: 0,
+      }));
+    }, effectDuration);
+  }, []);
+
+  // 音频节拍反应处理
+  const handleBeat = useCallback((strength: number) => {
+    // 清除之前的节拍效果
+    if (beatEffectRef.current) {
+      clearTimeout(beatEffectRef.current);
+    }
+
+    // 设置节拍状态
+    setAudioReactiveState(prev => ({
+      ...prev,
+      beatActive: true,
+      beatStrength: strength,
+    }));
+
+    // 节拍触发的效果：更大范围的透明度脉冲
+    const changeCount = Math.floor(strength * 25) + 8; // 8-33 个数字
+    const allKeys = Object.keys(zeroGridRef.current);
+    
+    if (allKeys.length > 0) {
+      const keysToChange: string[] = [];
+      
+      for (let i = 0; i < changeCount && i < allKeys.length; i++) {
+        let randomKey;
+        do {
+          randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+        } while (keysToChange.includes(randomKey));
+        keysToChange.push(randomKey);
+      }
+      
+      // 节拍效果：创建脉冲式的透明度变化
+      keysToChange.forEach(key => {
+        const currentState = zeroGridRef.current[key];
+        // 节拍时增加透明度，营造"闪烁"效果
+        currentState.opacity = Math.min(0.8, currentState.opacity + strength * 0.5);
+      });
+      
+      setZeroStates({ ...zeroGridRef.current });
+    }
+
+    // 节拍效果持续时间
+    beatEffectRef.current = setTimeout(() => {
+      setAudioReactiveState(prev => ({
+        ...prev,
+        beatActive: false,
+        beatStrength: 0,
+      }));
+    }, 200); // 节拍效果较短，200ms
+  }, []);
+
+  // 设置音频反应回调
+  useEffect(() => {
+    if (onAudioReactive) {
+      onAudioReactive.onTransient = handleTransient;
+      onAudioReactive.onBeat = handleBeat;
+    }
+  }, [onAudioReactive, handleTransient, handleBeat]);
 
   // Sync isAnimationPaused prop with a ref to avoid stale closures in the animation loop
   useEffect(() => {
@@ -1163,7 +1297,9 @@ const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = Pl
               pointerEvents: 'none',
               opacity: finalOpacity,
               zIndex: 1,
-              transition: 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out',
+              transition: audioReactiveState.transientActive || audioReactiveState.beatActive
+                ? 'color 0.1s ease-out, -webkit-text-stroke 0.1s ease-out, opacity 0.1s ease-out'
+                : 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out',
             }}
           >
             {displayNumber}
