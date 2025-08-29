@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { AudioTrack } from '../constants/playlist';
+import { PlayState } from '../constants/playlist';
 
 interface Point {
   x: number;
@@ -33,7 +35,13 @@ interface FlyingLine {
   originalDirection?: Point;
 }
 
-const LineBallAnimation = () => {
+interface LineBallAnimationProps {
+  currentTrack?: AudioTrack | null;
+  currentTrackIndex?: number;
+  playState?: PlayState;
+}
+
+const LineBallAnimation = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED }: LineBallAnimationProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const linesRef = useRef<FlyingLine[]>([]);
   const centerLinesRef = useRef<FlyingLine[]>([]); // Lines in the center ball
@@ -45,6 +53,7 @@ const LineBallAnimation = () => {
   const [circleScale, setCircleScale] = useState(1);
   const [gradientOffset, setGradientOffset] = useState(40); // Dynamic gradient position (20%-60% range)
   const [zeroStates, setZeroStates] = useState<{[key: string]: {isOutline: boolean, opacity: number}}>({}); // Fixed states for zeros
+  const [numbersVisible, setNumbersVisible] = useState(false); // Control numbers visibility based on music playback
   const dimensionsRef = useRef({ width: 0, height: 0 });
   const zeroGridRef = useRef<{[key: string]: {isOutline: boolean, opacity: number}}>({}); // Persistent zero grid
 
@@ -750,6 +759,21 @@ const LineBallAnimation = () => {
     }
   };
 
+  // Handle music playback state changes for numbers visibility
+  useEffect(() => {
+    if (playState === PlayState.PLAYING) {
+      // 音乐开始播放时，延迟淡入数字
+      const fadeInTimer = setTimeout(() => {
+        setNumbersVisible(true);
+      }, 500); // 0.5秒延迟淡入
+      
+      return () => clearTimeout(fadeInTimer);
+    } else {
+      // 音乐停止或暂停时，立即开始淡出
+      setNumbersVisible(false);
+    }
+  }, [playState]);
+
   // Handle window resize
   useEffect(() => {
     const handleResize = () => {
@@ -1094,6 +1118,12 @@ const LineBallAnimation = () => {
         const hexGray = grayValue.toString(16).padStart(2, '0');
         const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
         
+        // 显示当前播放音频的序号，如果没有音频则显示0
+        const displayNumber = currentTrack ? currentTrackIndex.toString() : '0';
+        
+        // 根据音乐播放状态和 numbersVisible 来计算最终透明度
+        const finalOpacity = numbersVisible ? zeroState.opacity : 0;
+        
         zeros.push(
           <div
             key={`zero-${zeroKey}`}
@@ -1108,12 +1138,12 @@ const LineBallAnimation = () => {
               WebkitTextStroke: zeroState.isOutline ? `2px ${zeroColor}` : 'none',
               userSelect: 'none',
               pointerEvents: 'none',
-              opacity: zeroState.opacity,
+              opacity: finalOpacity,
               zIndex: 1,
-              transition: 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 2s ease-in-out'
+              transition: 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out'
             }}
           >
-            0
+            {displayNumber}
           </div>
         );
       }

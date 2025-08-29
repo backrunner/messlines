@@ -69,6 +69,7 @@ const BottomOverlay = () => {
           transform: translateY(20px);
           transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
           z-index: 1000;
+          user-select: none;
         }
 
         .bottom-overlay.visible {
@@ -92,9 +93,8 @@ const BottomOverlay = () => {
           margin: 0;
           letter-spacing: -0.02em;
           text-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+          user-select: none;
         }
-
-
 
         .music-platforms-section {
           display: flex;
