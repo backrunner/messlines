@@ -7,6 +7,7 @@ interface AudioManagerProps {
   onPlayStateChange?: (state: PlayState) => void;
   onControlsReady?: (controls: AudioControls) => void;
   onAudioElementReady?: (audioElement: HTMLAudioElement | null) => void;
+  onAutoplayBlocked?: (blocked: boolean) => void; // 新增：自动播放被阻止的回调
 }
 
 interface AudioControls {
@@ -27,7 +28,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAudioElementReady }: AudioManagerProps) => {
+const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAudioElementReady, onAutoplayBlocked }: AudioManagerProps) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
@@ -93,8 +94,8 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     }, stepDuration);
   }, []);
 
-  // 播放指定音轨
-  const playTrack = useCallback(async (trackIndex: number) => {
+  // 播放指定音轨 - 添加throwOnError参数用于自动播放检测
+  const playTrack = useCallback(async (trackIndex: number, throwOnError: boolean = false) => {
     const track = shuffledPlaylist[trackIndex];
     if (!track || !audioRef.current) return;
 
@@ -143,6 +144,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
       console.error('播放音轨失败:', error);
       setPlayState(PlayState.ERROR);
       onPlayStateChange?.(PlayState.ERROR);
+      
+      // 如果需要抛出错误（用于自动播放检测），重新抛出
+      if (throwOnError) {
+        throw error;
+      }
     }
   }, [shuffledPlaylist, volume, fadeVolume, onTrackChange, onPlayStateChange]);
 
@@ -240,7 +246,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     };
   }, [playNext, onPlayStateChange]);
 
-  // 自动开始播放
+  // 自动开始播放 - 检测自动播放限制
   useEffect(() => {
     if (
       AUDIO_CONFIG.autoPlay && 
@@ -249,12 +255,26 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
       playState === PlayState.STOPPED
     ) {
       isInitializedRef.current = true;
-      // 延迟3秒开始播放，让动画先播放
-      setTimeout(() => {
-        playTrack(0);
+      
+      // 延迟3秒尝试自动播放，让动画先播放
+      setTimeout(async () => {
+        try {
+          // 直接尝试播放第一首歌来检测自动播放限制（throwOnError=true）
+          await playTrack(0, true);
+          
+          // 如果到这里说明自动播放成功
+          onAutoplayBlocked?.(false);
+          
+        } catch (error) {
+          // 自动播放被阻止
+          console.log('自动播放被浏览器阻止，需要用户交互:', error);
+          onAutoplayBlocked?.(true);
+          setPlayState(PlayState.STOPPED);
+          onPlayStateChange?.(PlayState.STOPPED);
+        }
       }, 3000);
     }
-  }, [shuffledPlaylist, playState, playTrack]);
+  }, [shuffledPlaylist, playState, playTrack, onAutoplayBlocked, onPlayStateChange]);
 
   // 清理资源
   useEffect(() => {

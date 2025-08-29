@@ -6,6 +6,7 @@ interface UserInteractionControllerProps {
   onTogglePlayPause: () => void;
   onNextTrack: () => void;
   onPrevTrack: () => void;
+  onInitialPlay?: () => void; // 添加初始播放回调
 }
 
 const UserInteractionController = ({
@@ -13,6 +14,7 @@ const UserInteractionController = ({
   onTogglePlayPause,
   onNextTrack,
   onPrevTrack,
+  onInitialPlay,
 }: UserInteractionControllerProps) => {
   const touchStartY = useRef<number>(0);
   const touchStartX = useRef<number>(0);
@@ -31,7 +33,12 @@ const UserInteractionController = ({
     switch (event.code) {
       case 'Space':
         event.preventDefault();
-        onTogglePlayPause();
+        // 如果是STOPPED状态且有初始播放回调，调用初始播放
+        if (playState === PlayState.STOPPED && onInitialPlay) {
+          onInitialPlay();
+        } else {
+          onTogglePlayPause();
+        }
         break;
       case 'ArrowRight':
       case 'Equal': // + 键
@@ -54,7 +61,32 @@ const UserInteractionController = ({
         onNextTrack();
         break;
     }
-  }, [onTogglePlayPause, onNextTrack, onPrevTrack]);
+  }, [onTogglePlayPause, onNextTrack, onPrevTrack, playState, onInitialPlay]);
+
+  // 桌面端点击事件处理
+  const handleClick = useCallback((event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    
+    // 检查是否点击了可交互元素
+    const isInteractiveElement = target.closest('button') || 
+                                target.closest('a') || 
+                                target.closest('input') ||
+                                target.closest('select') ||
+                                target.closest('textarea') ||
+                                target.closest('[role="button"]') ||
+                                target.closest('.music-platform-button') ||
+                                target.closest('.play-indicator') ||
+                                target.closest('.pause-indicator');
+
+    if (isInteractiveElement) {
+      return;
+    }
+
+    // 只在STOPPED状态下处理页面点击启动播放
+    if (playState === PlayState.STOPPED && onInitialPlay) {
+      onInitialPlay();
+    }
+  }, [playState, onInitialPlay]);
 
   // 检测是否为移动设备
   const isMobile = () => {
@@ -107,7 +139,13 @@ const UserInteractionController = ({
 
     // 如果是短时间的小距离移动，视为点击
     if (!isScrolling.current && deltaTime < 500 && Math.abs(deltaY) < 30 && Math.abs(deltaX) < 30) {
-      onTogglePlayPause();
+      // 如果是STOPPED状态且有初始播放回调，调用初始播放
+      if (playState === PlayState.STOPPED && onInitialPlay) {
+        onInitialPlay();
+      } else {
+        // 否则正常切换播放暂停
+        onTogglePlayPause();
+      }
       return;
     }
 
@@ -136,6 +174,11 @@ const UserInteractionController = ({
     // 键盘事件
     document.addEventListener('keydown', handleKeyDown);
     
+    // 桌面端点击事件（仅STOPPED状态下的初始播放）
+    if (!isMobile()) {
+      document.addEventListener('click', handleClick);
+    }
+    
     // 触摸事件（仅移动端）
     if (isMobile()) {
       document.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -145,13 +188,16 @@ const UserInteractionController = ({
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      if (!isMobile()) {
+        document.removeEventListener('click', handleClick);
+      }
       if (isMobile()) {
         document.removeEventListener('touchstart', handleTouchStart);
         document.removeEventListener('touchmove', handleTouchMove);
         document.removeEventListener('touchend', handleTouchEnd);
       }
     };
-  }, [handleKeyDown, handleTouchStart, handleTouchMove, handleTouchEnd]);
+  }, [handleKeyDown, handleClick, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   // 这个组件不渲染任何内容，只处理事件
   return null;
