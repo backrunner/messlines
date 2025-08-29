@@ -8,18 +8,18 @@ export interface MusicPlatformLink {
 // MessLines 音乐平台链接配置
 export const MUSIC_PLATFORM_LINKS: MusicPlatformLink[] = [
   {
-    name: 'iTunes',
-    url: 'https://music.apple.com',
-    icon: 'itunes'
+    name: 'YouTube Music',
+    url: 'https://music.youtube.com/channel/UCd99CRXWmyWDLdUnvrkZz5Q',
+    icon: 'youtube-music'
   },
   {
     name: 'Spotify',
-    url: 'https://open.spotify.com',
+    url: 'https://open.spotify.com/artist/2x8XHsmETlbrVm0ykQlk6p',
     icon: 'spotify'
   },
   {
     name: 'SoundCloud',
-    url: 'https://soundcloud.com',
+    url: 'https://soundcloud.com/messlines',
     icon: 'soundcloud'
   }
 ];

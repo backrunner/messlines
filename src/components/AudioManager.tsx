@@ -42,7 +42,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
   // 初始化播放列表
   useEffect(() => {
     if (AUDIO_PLAYLIST.length === 0) return;
-    
+
     if (AUDIO_CONFIG.shufflePlay) {
       // 创建乱序播放列表
       const shuffled = shuffleArray(AUDIO_PLAYLIST);
@@ -83,7 +83,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
       }
 
       currentStep++;
-      const newVolume = fromVolume + (volumeStep * currentStep);
+      const newVolume = fromVolume + volumeStep * currentStep;
       audioRef.current.volume = Math.max(0, Math.min(1, newVolume));
 
       if (currentStep >= steps) {
@@ -95,62 +95,67 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
   }, []);
 
   // 播放指定音轨 - 添加throwOnError参数用于自动播放检测
-  const playTrack = useCallback(async (trackIndex: number, throwOnError: boolean = false) => {
-    const track = shuffledPlaylist[trackIndex];
-    if (!track || !audioRef.current) return;
+  const playTrack = useCallback(
+    async (trackIndex: number, throwOnError: boolean = false) => {
+      const track = shuffledPlaylist[trackIndex];
+      if (!track || !audioRef.current) return;
 
-    try {
-      setPlayState(PlayState.LOADING);
-      
-      const audio = audioRef.current;
-      audio.src = track.url;
-      audio.volume = 0; // 开始时音量为0，准备淡入
-      
-      // 等待音频加载
-      await new Promise((resolve, reject) => {
-        const handleCanPlay = () => {
-          audio.removeEventListener('canplay', handleCanPlay);
-          audio.removeEventListener('error', handleError);
-          resolve(void 0);
-        };
-        
-        const handleError = () => {
-          audio.removeEventListener('canplay', handleCanPlay);
-          audio.removeEventListener('error', handleError);
-          reject(new Error('Failed to load audio'));
-        };
-        
-        audio.addEventListener('canplay', handleCanPlay);
-        audio.addEventListener('error', handleError);
-        audio.load();
-      });
+      try {
+        setPlayState(PlayState.LOADING);
 
-      // 开始播放并淡入
-      await audio.play();
-      setPlayState(PlayState.PLAYING);
-      setCurrentTrackIndex(trackIndex);
-      
-      // 标记此音轨已播放
-      setPlayedTracks(prev => new Set(prev).add(track.id));
-      
-      // 音量淡入
-      fadeVolume(0, volume, AUDIO_CONFIG.fadeInDuration);
-      
-      // 通知外部组件
-      onTrackChange?.(track, trackIndex);
-      onPlayStateChange?.(PlayState.PLAYING);
-      
-    } catch (error) {
-      console.error('播放音轨失败:', error);
-      setPlayState(PlayState.ERROR);
-      onPlayStateChange?.(PlayState.ERROR);
-      
-      // 如果需要抛出错误（用于自动播放检测），重新抛出
-      if (throwOnError) {
-        throw error;
+        const audio = audioRef.current;
+        audio.src = track.url;
+        audio.volume = 0; // 开始时音量为0，准备淡入
+
+        // 等待音频加载
+        await new Promise((resolve, reject) => {
+          const handleCanPlay = () => {
+            audio.removeEventListener('canplay', handleCanPlay);
+            audio.removeEventListener('error', handleError);
+            resolve(void 0);
+          };
+
+          const handleError = () => {
+            audio.removeEventListener('canplay', handleCanPlay);
+            audio.removeEventListener('error', handleError);
+            reject(new Error('Failed to load audio'));
+          };
+
+          audio.addEventListener('canplay', handleCanPlay);
+          audio.addEventListener('error', handleError);
+          audio.load();
+        });
+
+        // 开始播放并淡入
+        await audio.play();
+        setPlayState(PlayState.PLAYING);
+        setCurrentTrackIndex(trackIndex);
+
+        // 标记此音轨已播放
+        setPlayedTracks((prev) => new Set(prev).add(track.id));
+
+        // 音量淡入
+        fadeVolume(0, volume, AUDIO_CONFIG.fadeInDuration);
+
+        // 通知外部组件
+        onTrackChange?.(track, trackIndex);
+        onPlayStateChange?.(PlayState.PLAYING);
+      } catch (error) {
+        console.error('播放音轨失败:', error);
+
+        // 如果是自动播放检测失败，保持STOPPED状态；否则设置ERROR状态
+        if (throwOnError) {
+          setPlayState(PlayState.STOPPED);
+          onPlayStateChange?.(PlayState.STOPPED);
+          throw error;
+        } else {
+          setPlayState(PlayState.ERROR);
+          onPlayStateChange?.(PlayState.ERROR);
+        }
       }
-    }
-  }, [shuffledPlaylist, volume, fadeVolume, onTrackChange, onPlayStateChange]);
+    },
+    [shuffledPlaylist, volume, fadeVolume, onTrackChange, onPlayStateChange]
+  );
 
   // 播放下一首
   const playNext = useCallback(() => {
@@ -194,7 +199,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
   // 停止播放
   const stop = useCallback(() => {
     if (!audioRef.current) return;
-    
+
     fadeVolume(audioRef.current.volume, 0, AUDIO_CONFIG.fadeOutDuration, () => {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -217,8 +222,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
       audioRef.current.play();
       setPlayState(PlayState.PLAYING);
       onPlayStateChange?.(PlayState.PLAYING);
+    } else if (playState === PlayState.STOPPED || playState === PlayState.ERROR) {
+      // 如果是停止或错误状态，重新开始播放
+      playTrack(currentTrackIndex);
     }
-  }, [playState, onPlayStateChange]);
+  }, [playState, onPlayStateChange, playTrack, currentTrackIndex]);
 
   // 音频事件处理
   useEffect(() => {
@@ -248,23 +256,17 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
 
   // 自动开始播放 - 检测自动播放限制
   useEffect(() => {
-    if (
-      AUDIO_CONFIG.autoPlay && 
-      shuffledPlaylist.length > 0 && 
-      !isInitializedRef.current &&
-      playState === PlayState.STOPPED
-    ) {
+    if (AUDIO_CONFIG.autoPlay && shuffledPlaylist.length > 0 && !isInitializedRef.current && playState === PlayState.STOPPED) {
       isInitializedRef.current = true;
-      
+
       // 延迟3秒尝试自动播放，让动画先播放
       setTimeout(async () => {
         try {
           // 直接尝试播放第一首歌来检测自动播放限制（throwOnError=true）
           await playTrack(0, true);
-          
+
           // 如果到这里说明自动播放成功
           onAutoplayBlocked?.(false);
-          
         } catch (error) {
           // 自动播放被阻止
           console.log('自动播放被浏览器阻止，需要用户交互:', error);
@@ -286,13 +288,16 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
   }, []);
 
   // 创建稳定的控制器对象引用
-  const controls = useMemo<AudioControls>(() => ({
-    togglePlayPause,
-    nextTrack: playNext,
-    prevTrack: playPrev,
-    getCurrentTrack,
-    getPlayState: () => playState,
-  }), [togglePlayPause, playNext, playPrev, getCurrentTrack, playState]);
+  const controls = useMemo<AudioControls>(
+    () => ({
+      togglePlayPause,
+      nextTrack: playNext,
+      prevTrack: playPrev,
+      getCurrentTrack,
+      getPlayState: () => playState,
+    }),
+    [togglePlayPause, playNext, playPrev, getCurrentTrack, playState]
+  );
 
   // 将控制器传递给父组件
   useEffect(() => {
@@ -321,13 +326,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     }
   }, [playTrack, currentTrackIndex, stop, playNext, playPrev, togglePlayPause, getCurrentTrack, playState, shuffledPlaylist]);
 
-  return (
-    <audio
-      ref={audioRef}
-      style={{ display: 'none' }}
-      preload="metadata"
-    />
-  );
+  return <audio ref={audioRef} style={{ display: 'none' }} preload="metadata" />;
 };
 
 export default AudioManager;

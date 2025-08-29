@@ -6,8 +6,8 @@ import { MUSIC_PLATFORM_LINKS, BRAND_CONFIG } from '../constants/links';
 const MusicPlatformIcon = ({ platform }: { platform: (typeof MUSIC_PLATFORM_LINKS)[0] }) => {
   const getIconName = (iconName: string) => {
     switch (iconName) {
-      case 'itunes':
-        return 'simple-icons:itunes'; // iTunes 官方图标
+      case 'youtube-music':
+        return 'simple-icons:youtubemusic'; // YouTube Music 官方图标
       case 'spotify':
         return 'simple-icons:spotify'; // Spotify 官方图标
       case 'soundcloud':
