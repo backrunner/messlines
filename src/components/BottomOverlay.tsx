@@ -2,16 +2,16 @@ import { useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { MUSIC_PLATFORM_LINKS, BRAND_CONFIG } from '../constants/links';
 
-// 音乐平台图标组件
+// Music platform icon component
 const MusicPlatformIcon = ({ platform }: { platform: (typeof MUSIC_PLATFORM_LINKS)[0] }) => {
   const getIconName = (iconName: string) => {
     switch (iconName) {
       case 'youtube-music':
-        return 'simple-icons:youtubemusic'; // YouTube Music 官方图标
+        return 'simple-icons:youtubemusic';
       case 'spotify':
-        return 'simple-icons:spotify'; // Spotify 官方图标
+        return 'simple-icons:spotify';
       case 'soundcloud':
-        return 'simple-icons:soundcloud'; // SoundCloud 官方图标
+        return 'simple-icons:soundcloud';
       default:
         return 'mdi:music';
     }
@@ -22,7 +22,7 @@ const MusicPlatformIcon = ({ platform }: { platform: (typeof MUSIC_PLATFORM_LINK
   };
 
   return (
-    <button onClick={handleClick} className="music-platform-button" aria-label={`打开 ${platform.name}`} title={platform.name}>
+    <button onClick={handleClick} className="music-platform-button" aria-label={`Open ${platform.name}`} title={platform.name}>
       <Icon icon={getIconName(platform.icon)} width="20" height="20" />
     </button>
   );
@@ -32,7 +32,7 @@ const BottomOverlay = () => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // 3秒后显示组件
+    // Show component after 3 seconds
     const timer = setTimeout(() => {
       setIsVisible(true);
     }, 3000);
@@ -41,13 +41,13 @@ const BottomOverlay = () => {
   }, []);
 
   return (
-    <div className={`bottom-overlay ${isVisible ? 'visible' : ''}`} role="complementary" aria-label="MessLines 品牌和音乐平台链接">
-      {/* 左下角品牌文字 */}
+    <div className={`bottom-overlay ${isVisible ? 'visible' : ''}`} role="complementary" aria-label="MessLines brand and music platform links">
+      {/* Brand text in bottom left */}
       <div className="brand-section">
         <h1 className="brand-name">{BRAND_CONFIG.name}</h1>
       </div>
 
-      {/* 右下角音乐平台按钮 */}
+      {/* Music platform buttons in bottom right */}
       <div className="music-platforms-section">
         {MUSIC_PLATFORM_LINKS.map((platform) => (
           <MusicPlatformIcon key={platform.name} platform={platform} />
@@ -156,7 +156,7 @@ const BottomOverlay = () => {
           transform: scale(1.1);
         }
 
-        /* 响应式设计 */
+        /* Responsive design */
         @media (max-width: 768px) {
           .bottom-overlay {
             padding: 1.5rem;
@@ -194,7 +194,7 @@ const BottomOverlay = () => {
           }
         }
 
-        /* 深色模式适配 */
+        /* Dark mode adaptation */
         @media (prefers-color-scheme: dark) {
           .brand-name {
             background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
@@ -206,7 +206,7 @@ const BottomOverlay = () => {
 
         }
 
-        /* 高对比度模式支持 */
+        /* High contrast mode support */
         @media (prefers-contrast: high) {
           .brand-name {
             -webkit-text-fill-color: #ffffff;
@@ -219,7 +219,7 @@ const BottomOverlay = () => {
           }
         }
 
-        /* 减少动画偏好 */
+        /* Reduced motion preference */
         @media (prefers-reduced-motion: reduce) {
           .bottom-overlay,
           .music-platform-button,

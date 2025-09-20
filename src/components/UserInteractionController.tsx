@@ -6,7 +6,7 @@ interface UserInteractionControllerProps {
   onTogglePlayPause: () => void;
   onNextTrack: () => void;
   onPrevTrack: () => void;
-  onInitialPlay?: () => void; // 添加初始播放回调
+  onInitialPlay?: () => void;
 }
 
 const UserInteractionController = ({
@@ -21,9 +21,9 @@ const UserInteractionController = ({
   const touchStartTime = useRef<number>(0);
   const isScrolling = useRef<boolean>(false);
 
-  // 键盘事件处理
+  // Handle keyboard events for media control
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    // 防止在输入框等元素中触发
+    // Prevent triggering in input elements
     if (event.target instanceof HTMLInputElement || 
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLSelectElement) {
@@ -33,7 +33,7 @@ const UserInteractionController = ({
     switch (event.code) {
       case 'Space':
         event.preventDefault();
-        // 如果是STOPPED状态且有初始播放回调，调用初始播放
+        // Call initial play if in STOPPED state and callback is available
         if (playState === PlayState.STOPPED && onInitialPlay) {
           onInitialPlay();
         } else {
@@ -41,7 +41,7 @@ const UserInteractionController = ({
         }
         break;
       case 'ArrowRight':
-      case 'Equal': // + 键
+      case 'Equal': // + key
       case 'NumpadAdd':
         event.preventDefault();
         onNextTrack();
@@ -63,11 +63,11 @@ const UserInteractionController = ({
     }
   }, [onTogglePlayPause, onNextTrack, onPrevTrack, playState, onInitialPlay]);
 
-  // 桌面端点击事件处理
+  // Handle desktop click events
   const handleClick = useCallback((event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    
-    // 检查是否点击了可交互元素
+
+    // Check if clicked on interactive elements
     const isInteractiveElement = target.closest('button') || 
                                 target.closest('a') || 
                                 target.closest('input') ||
@@ -82,20 +82,19 @@ const UserInteractionController = ({
       return;
     }
 
-    // 只在STOPPED状态下处理页面点击启动播放
+    // Only handle page clicks to start playback when in STOPPED state
     if (playState === PlayState.STOPPED && onInitialPlay) {
       onInitialPlay();
     }
   }, [playState, onInitialPlay]);
 
-  // 检测是否为移动设备
+  // Detect mobile device
   const isMobile = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
            ('ontouchstart' in window) || 
            (navigator.maxTouchPoints > 0);
   };
 
-  // 触摸开始
   const handleTouchStart = useCallback((event: TouchEvent) => {
     const touch = event.touches[0];
     touchStartY.current = touch.clientY;
@@ -104,19 +103,17 @@ const UserInteractionController = ({
     isScrolling.current = false;
   }, []);
 
-  // 触摸移动
   const handleTouchMove = useCallback((event: TouchEvent) => {
     const touch = event.touches[0];
     const deltaY = Math.abs(touch.clientY - touchStartY.current);
     const deltaX = Math.abs(touch.clientX - touchStartX.current);
     
-    // 如果移动距离超过阈值，标记为滚动
+    // Mark as scrolling if movement exceeds threshold
     if (deltaY > 10 || deltaX > 10) {
       isScrolling.current = true;
     }
   }, []);
 
-  // 触摸结束
   const handleTouchEnd = useCallback((event: TouchEvent) => {
     const touch = event.changedTouches[0];
     const deltaY = touch.clientY - touchStartY.current;
@@ -124,9 +121,9 @@ const UserInteractionController = ({
     const deltaTime = Date.now() - touchStartTime.current;
     const target = event.target as HTMLElement;
     
-    // 检查是否点击了可交互元素
-    const isInteractiveElement = target.closest('button') || 
-                                target.closest('a') || 
+    // Check if touched interactive elements
+    const isInteractiveElement = target.closest('button') ||
+                                target.closest('a') ||
                                 target.closest('input') ||
                                 target.closest('select') ||
                                 target.closest('textarea') ||
@@ -137,19 +134,19 @@ const UserInteractionController = ({
       return;
     }
 
-    // 如果是短时间的小距离移动，视为点击
+    // Treat short-time small movement as tap
     if (!isScrolling.current && deltaTime < 500 && Math.abs(deltaY) < 30 && Math.abs(deltaX) < 30) {
-      // 如果是STOPPED状态且有初始播放回调，调用初始播放
+      // Call initial play if in STOPPED state and callback is available
       if (playState === PlayState.STOPPED && onInitialPlay) {
         onInitialPlay();
       } else {
-        // 否则正常切换播放暂停
+        // Otherwise toggle play/pause normally
         onTogglePlayPause();
       }
       return;
     }
 
-    // 垂直滑动手势检测
+    // Vertical swipe gesture detection
     const minSwipeDistance = 50;
     const maxSwipeTime = 800;
     
@@ -160,26 +157,24 @@ const UserInteractionController = ({
       event.preventDefault();
       
       if (deltaY < 0) {
-        // 向上滑动 - 上一首
+        // Swipe up - previous track
         onPrevTrack();
       } else {
-        // 向下滑动 - 下一首
+        // Swipe down - next track
         onNextTrack();
       }
     }
   }, [onTogglePlayPause, onNextTrack, onPrevTrack]);
 
-  // 添加事件监听器
   useEffect(() => {
-    // 键盘事件
     document.addEventListener('keydown', handleKeyDown);
     
-    // 桌面端点击事件（仅STOPPED状态下的初始播放）
+    // Desktop click events (initial play in STOPPED state only)
     if (!isMobile()) {
       document.addEventListener('click', handleClick);
     }
     
-    // 触摸事件（仅移动端）
+    // Touch events (mobile only)
     if (isMobile()) {
       document.addEventListener('touchstart', handleTouchStart, { passive: false });
       document.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -199,7 +194,7 @@ const UserInteractionController = ({
     };
   }, [handleKeyDown, handleClick, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  // 这个组件不渲染任何内容，只处理事件
+  // This component renders nothing, only handles events
   return null;
 };
 

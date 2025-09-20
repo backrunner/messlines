@@ -7,14 +7,14 @@ interface PlayIndicatorProps {
 }
 
 const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
-  // 播放指示器总是可见的（因为只有在自动播放被阻止时才会渲染此组件）
+  // Play indicator is always visible (this component only renders when autoplay is blocked)
   const needsUserInteraction = true;
 
   return (
     <div
       className={`play-indicator ${needsUserInteraction ? 'visible' : ''}`}
       role="button"
-      aria-label="点击开始播放音乐"
+      aria-label="Click to start playing music"
       onClick={onPlay}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -84,7 +84,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           opacity: 1;
         }
 
-        /* 呼吸效果 */
+        /* Breathing effect */
         .play-indicator.visible {
           animation: playBreathing 3s ease-in-out infinite alternate;
         }
@@ -98,7 +98,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           }
         }
 
-        /* 脉冲效果 */
+        /* Pulse effect */
         .play-indicator.visible::after {
           content: '';
           position: absolute;
@@ -122,13 +122,13 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           }
         }
 
-        /* 焦点样式 */
+        /* Focus styles */
         .play-indicator:focus {
           outline: 2px solid rgba(255, 255, 255, 0.5);
           outline-offset: 2px;
         }
 
-        /* 响应式设计 */
+        /* Responsive design */
         @media (max-width: 768px) {
           .play-indicator {
             top: 1.5rem;
@@ -157,7 +157,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           }
         }
 
-        /* 减少动画偏好 */
+        /* Reduced motion preferences */
         @media (prefers-reduced-motion: reduce) {
           .play-indicator,
           .play-indicator::before,
@@ -176,7 +176,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           }
         }
 
-        /* 高对比度模式支持 */
+        /* High contrast mode support */
         @media (prefers-contrast: high) {
           .play-indicator {
             background: rgba(255, 255, 255, 0.4);
@@ -188,7 +188,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           }
         }
 
-        /* 触摸设备优化 */
+        /* Touch device optimization */
         @media (hover: none) and (pointer: coarse) {
           .play-indicator:hover {
             background: rgba(255, 255, 255, 0.12);

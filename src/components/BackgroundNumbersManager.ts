@@ -1,13 +1,13 @@
 /**
- * 高性能背景数字管理器
- * 直接操作DOM，避免React重新渲染导致的性能问题
+ * High-performance background numbers manager
+ * Direct DOM manipulation to avoid React re-render performance issues
  */
 
 interface ZeroState {
   isOutline: boolean;
   opacity: number;
   element: HTMLDivElement;
-  isEmpty: boolean; // 新增：标记位置是否为空
+  isEmpty: boolean; // Marks whether this position should be empty
 }
 
 interface AudioReactiveState {
@@ -36,11 +36,11 @@ class BackgroundNumbersManager {
   private transientTimeoutId: NodeJS.Timeout | null = null;
   private beatTimeoutId: NodeJS.Timeout | null = null;
 
-  // 配置常量
+  // Configuration constants
   private readonly FONT_SIZE = 120;
   private readonly SPACING = this.FONT_SIZE * 0.8;
   private readonly OVERFLOW = this.FONT_SIZE;
-  private readonly MIN_EMPTY_PERCENTAGE = 0.1; // 至少10%的位置为空
+  private readonly MIN_EMPTY_PERCENTAGE = 0.1; // At least 10% of positions should be empty
 
   constructor(containerElement: HTMLDivElement) {
     this.container = containerElement;
@@ -67,11 +67,11 @@ class BackgroundNumbersManager {
 
     const { width, height } = this.getViewportDimensions();
 
-    // 清除现有元素
+    // Clear existing elements
     this.container.innerHTML = '';
     this.zeroGrid = {};
 
-    // 计算网格范围
+    // Calculate grid bounds
     const startX = -this.OVERFLOW;
     const endX = width + this.OVERFLOW;
     const startY = -this.OVERFLOW;
@@ -80,11 +80,11 @@ class BackgroundNumbersManager {
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
 
-    // 计算总位置数和需要空着的位置数
+    // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
     const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
 
-    // 生成随机空位置索引
+    // Generate random empty position indices
     const emptyPositions = new Set<number>();
     while (emptyPositions.size < emptyPositionsCount) {
       const randomIndex = Math.floor(Math.random() * totalPositions);
@@ -116,11 +116,11 @@ class BackgroundNumbersManager {
     const hexGray = grayValue.toString(16).padStart(2, '0');
     const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
 
-    // 初始状态
+    // Initial state
     const isOutline = Math.random() < 0.5;
-    const opacity = 0.25; // 调整初始透明度为更适中的值
+    const opacity = 0.25; // Set initial opacity to a moderate value
 
-    // 设置样式
+    // Set styles
     element.style.position = 'absolute';
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
@@ -129,17 +129,17 @@ class BackgroundNumbersManager {
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
-    element.style.opacity = '0'; // 初始隐藏
+    element.style.opacity = '0'; // Initially hidden
     element.style.transition = 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
 
     this.updateElementStyle(element, isOutline, zeroColor, 0);
 
-    // 如果不是空位置，显示当前音轨索引
+    // If not an empty position, display current track index
     if (!isEmpty) {
       const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
       element.textContent = displayNumber;
     } else {
-      element.textContent = ''; // 空位置不显示内容
+      element.textContent = ''; // Empty positions show no content
     }
 
     this.container.appendChild(element);
@@ -155,20 +155,20 @@ class BackgroundNumbersManager {
   private calculateGradientColor(element: HTMLDivElement): string {
     const { width, height } = this.getViewportDimensions();
 
-    // 获取元素在视口中的位置
+    // Get element position within viewport
     const elementTop = parseFloat(element.style.top);
-    const elementY = elementTop + this.OVERFLOW; // 调整偏移量
+    const elementY = elementTop + this.OVERFLOW; // Adjust for overflow offset
 
-    // 计算渐变范围
+    // Calculate gradient range
     const startY = -this.OVERFLOW;
     const endY = height + this.OVERFLOW;
 
-    // 计算归一化的Y位置 (0在顶部，1在底部)
+    // Calculate normalized Y position (0 at top, 1 at bottom)
     const normalizedY = Math.max(0, Math.min(1, (elementY - startY) / (endY - startY)));
 
-    // 渐变颜色计算：顶部较深 (#111)，底部较浅 (#333)
-    const bottomGray = 0x33; // #333
-    const topGray = 0x11;    // #111
+    // Gradient color calculation: darker at top (#111), lighter at bottom (#333)
+    const bottomGray = 0x33;
+    const topGray = 0x11;
     const grayValue = Math.round(topGray + (bottomGray - topGray) * normalizedY);
     const hexGray = grayValue.toString(16).padStart(2, '0');
 
@@ -197,35 +197,35 @@ class BackgroundNumbersManager {
     let lastOutlineUpdate = 0;
     let lastFadeUpdate = 0;
     let lastEmptyPositionUpdate = 0;
-    
-    // 随机化初始间隔，避免所有更新同时触发
-    let outlineInterval = 7000 + Math.random() * 3000; // 7-10秒随机间隔
-    let fadeInterval = 2500 + Math.random() * 2000;    // 2.5-4.5秒随机间隔
-    let emptyPositionInterval = 9000 + Math.random() * 4000; // 9-13秒随机间隔
+
+    // Randomize initial intervals to avoid all updates triggering simultaneously
+    let outlineInterval = 7000 + Math.random() * 3000; // 7-10s random interval
+    let fadeInterval = 2500 + Math.random() * 2000;    // 2.5-4.5s random interval
+    let emptyPositionInterval = 9000 + Math.random() * 4000; // 9-13s random interval
 
     const update = (now: number) => {
-      // 随机间隔的轮廓切换
+      // Random interval outline switching
       if (now - lastOutlineUpdate > outlineInterval) {
         this.randomOutlineUpdate();
         lastOutlineUpdate = now;
-        // 重新随机化下次间隔
-        outlineInterval = 6000 + Math.random() * 4000; // 6-10秒
+        // Re-randomize next interval
+        outlineInterval = 6000 + Math.random() * 4000;
       }
 
-      // 随机间隔的透明度变化
+      // Random interval opacity changes
       if (now - lastFadeUpdate > fadeInterval) {
         this.randomFadeUpdate();
         lastFadeUpdate = now;
-        // 重新随机化下次间隔
-        fadeInterval = 2000 + Math.random() * 3000; // 2-5秒
+        // Re-randomize next interval
+        fadeInterval = 2000 + Math.random() * 3000;
       }
 
-      // 随机间隔的空位置切换
+      // Random interval empty position switching
       if (now - lastEmptyPositionUpdate > emptyPositionInterval) {
         this.randomEmptyPositionUpdate();
         lastEmptyPositionUpdate = now;
-        // 重新随机化下次间隔
-        emptyPositionInterval = 8000 + Math.random() * 6000; // 8-14秒
+        // Re-randomize next interval
+        emptyPositionInterval = 8000 + Math.random() * 6000;
       }
 
       this.animationFrameId = requestAnimationFrame(update);
@@ -235,7 +235,7 @@ class BackgroundNumbersManager {
   }
 
   private randomOutlineUpdate() {
-    // 只对非空位置进行轮廓更新
+    // Only apply outline updates to non-empty positions
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
     if (nonEmptyKeys.length === 0) return;
 
@@ -260,7 +260,7 @@ class BackgroundNumbersManager {
   }
 
   private randomFadeUpdate() {
-    // 只对非空位置进行透明度更新
+    // Only apply opacity updates to non-empty positions
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
     if (nonEmptyKeys.length === 0) return;
 
@@ -279,30 +279,30 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 增加透明度变化的随机性和多样性
+      // Increase randomness and diversity in opacity changes
       const opacityPattern = Math.random();
       
       if (opacityPattern < 0.4) {
-        // 40%几率：简单明暗切换
+        // 40% chance: simple bright/dark toggle
         zeroState.opacity = zeroState.opacity > 0.25 ? 0.08 + Math.random() * 0.12 : 0.3 + Math.random() * 0.2;
       } else if (opacityPattern < 0.7) {
-        // 30%几率：渐进式变化
+        // 30% chance: gradual change
         const currentOpacity = zeroState.opacity;
         const direction = Math.random() < 0.5 ? 1 : -1;
         const change = (Math.random() * 0.15 + 0.05) * direction;
         zeroState.opacity = Math.max(0.05, Math.min(0.6, currentOpacity + change));
       } else if (opacityPattern < 0.9) {
-        // 20%几率：随机区间设置
+        // 20% chance: random zone setting
         const randomZone = Math.random();
         if (randomZone < 0.33) {
-          zeroState.opacity = 0.05 + Math.random() * 0.15; // 低区间
+          zeroState.opacity = 0.05 + Math.random() * 0.15; // Low range
         } else if (randomZone < 0.66) {
-          zeroState.opacity = 0.2 + Math.random() * 0.2; // 中区间
+          zeroState.opacity = 0.2 + Math.random() * 0.2; // Medium range
         } else {
-          zeroState.opacity = 0.4 + Math.random() * 0.2; // 高区间
+          zeroState.opacity = 0.4 + Math.random() * 0.2; // High range
         }
       } else {
-        // 10%几率：极端值
+        // 10% chance: extreme values
         zeroState.opacity = Math.random() < 0.5 ? 0.02 + Math.random() * 0.08 : 0.5 + Math.random() * 0.3;
       }
 
@@ -310,7 +310,7 @@ class BackgroundNumbersManager {
     });
   }
 
-  // 新增：随机切换空位置的方法
+  // Randomly switch empty positions
   private randomEmptyPositionUpdate() {
     const allKeys = Object.keys(this.zeroGrid);
     if (allKeys.length === 0) return;
@@ -320,10 +320,10 @@ class BackgroundNumbersManager {
     const currentEmptyKeys = allKeys.filter(key => this.zeroGrid[key].isEmpty);
     const currentNonEmptyKeys = allKeys.filter(key => !this.zeroGrid[key].isEmpty);
 
-    // 计算需要调整的位置数量（随机切换一部分空位置）
-    const switchCount = Math.floor(Math.random() * Math.min(5, targetEmptyCount / 2)) + 1; // 1-5个位置
+    // Calculate number of positions to adjust (randomly switch some empty positions)
+    const switchCount = Math.floor(Math.random() * Math.min(5, targetEmptyCount / 2)) + 1; // 1-5 positions
 
-    // 随机选择一些空位置变成非空
+    // Randomly select some empty positions to fill
     const emptyKeysToFill: string[] = [];
     for (let i = 0; i < switchCount && i < currentEmptyKeys.length; i++) {
       let randomKey;
@@ -333,7 +333,7 @@ class BackgroundNumbersManager {
       emptyKeysToFill.push(randomKey);
     }
 
-    // 随机选择一些非空位置变成空
+    // Randomly select some non-empty positions to empty
     const nonEmptyKeysToEmpty: string[] = [];
     for (let i = 0; i < switchCount && i < currentNonEmptyKeys.length; i++) {
       let randomKey;
@@ -343,13 +343,13 @@ class BackgroundNumbersManager {
       nonEmptyKeysToEmpty.push(randomKey);
     }
 
-    // 执行切换
+    // Execute the switches
     emptyKeysToFill.forEach(key => {
       const zeroState = this.zeroGrid[key];
       if (!zeroState) return;
 
       zeroState.isEmpty = false;
-      // 设置为显示数字
+      // Set to display number
       const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
       zeroState.element.textContent = displayNumber;
       this.updateZeroDisplay(key);
@@ -360,9 +360,9 @@ class BackgroundNumbersManager {
       if (!zeroState) return;
 
       zeroState.isEmpty = true;
-      // 清空显示内容
+      // Clear display content
       zeroState.element.textContent = '';
-      // 立即隐藏
+      // Hide immediately
       zeroState.element.style.opacity = '0';
     });
   }
@@ -373,7 +373,7 @@ class BackgroundNumbersManager {
 
     const element = zeroState.element;
 
-    // 如果是空位置，始终隐藏
+    // Always hide if it's an empty position
     if (zeroState.isEmpty) {
       element.style.opacity = '0';
       return;
@@ -381,35 +381,35 @@ class BackgroundNumbersManager {
 
     const finalOpacity = this.numbersVisible ? zeroState.opacity : 0;
 
-    // 重新计算基于位置的渐变颜色
+    // Recalculate position-based gradient color
     const gradientColor = this.calculateGradientColor(element);
 
     this.updateElementStyle(element, zeroState.isOutline, gradientColor, finalOpacity);
   }
 
-  // 公共方法：设置音乐播放状态
+  // Public method: set music playback state
   public setPlayState(isPlaying: boolean) {
     if (isPlaying && !this.numbersVisible) {
-      // 延迟淡入
+      // Delayed fade in
       setTimeout(() => {
         this.numbersVisible = true;
         this.updateAllZerosVisibility();
       }, 500);
     } else if (!isPlaying && this.numbersVisible) {
-      // 立即淡出
+      // Immediate fade out
       this.numbersVisible = false;
       this.updateAllZerosVisibility();
     }
   }
 
-  // 公共方法：设置当前音轨
+  // Public method: set current track
   public setCurrentTrack(track: any, trackIndex: number) {
     this.currentTrack = track;
     this.currentTrackIndex = trackIndex;
     this.updateAllZerosContent();
   }
 
-  // 公共方法：处理音频瞬态
+  // Public method: handle audio transients
   public handleTransient(intensity: number, frequency: 'low' | 'mid' | 'high') {
     if (this.transientTimeoutId) {
       clearTimeout(this.transientTimeoutId);
@@ -429,7 +429,7 @@ class BackgroundNumbersManager {
     }, effectDuration);
   }
 
-  // 公共方法：处理音频节拍
+  // Public method: handle audio beats
   public handleBeat(strength: number) {
     if (this.beatTimeoutId) {
       clearTimeout(this.beatTimeoutId);
@@ -448,12 +448,12 @@ class BackgroundNumbersManager {
   }
 
   private applyTransientEffect(intensity: number, frequency: 'low' | 'mid' | 'high') {
-    // 添加随机性：瞬态强度影响变化数量，但加入随机波动
+    // Add randomness: transient intensity affects change count with random variation
     const baseChangeCount = Math.floor(intensity * 30) + 5;
-    const randomVariation = Math.floor(Math.random() * 10) - 5; // -5到+5的随机变化
+    const randomVariation = Math.floor(Math.random() * 10) - 5; // Random variation from -5 to +5
     const changeCount = Math.max(3, baseChangeCount + randomVariation);
-    
-    // 只对非空位置应用瞬态效果
+
+    // Only apply transient effects to non-empty positions
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
 
     if (nonEmptyKeys.length === 0) return;
@@ -471,49 +471,49 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 随机化过渡时间，创造更自然的效果
-      const transitionDuration = 0.08 + Math.random() * 0.04; // 0.08-0.12s之间随机
+      // Randomize transition time for more natural effects
+      const transitionDuration = 0.08 + Math.random() * 0.04; // Random between 0.08-0.12s
       zeroState.element.style.transition = `color ${transitionDuration}s ease-out, -webkit-text-stroke ${transitionDuration}s ease-out, opacity ${transitionDuration}s ease-out`;
 
-      // 根据频率类型应用不同的随机效果
-      const randomFactor = Math.random(); // 0-1的随机因子
+      // Apply different random effects based on frequency type
+      const randomFactor = Math.random(); // Random factor 0-1
       
       if (frequency === 'low') {
-        // 低频：偏向轮廓切换，但加入透明度随机变化
+        // Low frequency: prefer outline switching with random opacity changes
         if (randomFactor < 0.7) {
           zeroState.isOutline = !zeroState.isOutline;
         }
         if (randomFactor < 0.4) {
-          // 40%几率同时改变透明度
-          zeroState.opacity = 0.05 + Math.random() * 0.35; // 0.05-0.4之间随机
+          // 40% chance to also change opacity
+          zeroState.opacity = 0.05 + Math.random() * 0.35; // Random between 0.05-0.4
         }
       } else if (frequency === 'high') {
-        // 高频：主要影响透明度，更加闪烁
-        const opacityRandomness = Math.random() * 0.3; // 0-0.3的随机加成
+        // High frequency: mainly affects opacity, more flickering
+        const opacityRandomness = Math.random() * 0.3; // Random bonus 0-0.3
         if (zeroState.opacity > 0.15) {
-          zeroState.opacity = Math.max(0.02, 0.05 - opacityRandomness); // 变暗，但有随机性
+          zeroState.opacity = Math.max(0.02, 0.05 - opacityRandomness); // Darken with randomness
         } else {
-          zeroState.opacity = Math.min(0.8, 0.6 + opacityRandomness); // 变亮，但有随机性
+          zeroState.opacity = Math.min(0.8, 0.6 + opacityRandomness); // Brighten with randomness
         }
-        
-        // 30%几率同时切换轮廓
+
+        // 30% chance to also switch outline
         if (randomFactor < 0.3) {
           zeroState.isOutline = !zeroState.isOutline;
         }
       } else {
-        // 中频：混合效果，最大随机性
+        // Mid frequency: mixed effects, maximum randomness
         if (randomFactor < 0.6) {
           zeroState.isOutline = !zeroState.isOutline;
         }
         
-        // 透明度变化更加随机
+        // More random opacity changes
         const opacityChoice = Math.random();
         if (opacityChoice < 0.33) {
-          zeroState.opacity = 0.05 + Math.random() * 0.15; // 低透明度区间
+          zeroState.opacity = 0.05 + Math.random() * 0.15; // Low opacity range
         } else if (opacityChoice < 0.66) {
-          zeroState.opacity = 0.25 + Math.random() * 0.25; // 中透明度区间
+          zeroState.opacity = 0.25 + Math.random() * 0.25; // Medium opacity range
         } else {
-          zeroState.opacity = 0.5 + Math.random() * 0.3; // 高透明度区间
+          zeroState.opacity = 0.5 + Math.random() * 0.3; // High opacity range
         }
       }
 
@@ -522,12 +522,12 @@ class BackgroundNumbersManager {
   }
 
   private applyBeatEffect(strength: number) {
-    // 添加随机性：节拍强度影响基础变化数量，再加上随机波动
+    // Add randomness: beat strength affects base change count plus random variation
     const baseChangeCount = Math.floor(strength * 25) + 8;
-    const randomVariation = Math.floor(Math.random() * 12) - 6; // -6到+6的随机变化
+    const randomVariation = Math.floor(Math.random() * 12) - 6; // Random variation from -6 to +6
     const changeCount = Math.max(5, baseChangeCount + randomVariation);
-    
-    // 只对非空位置应用节拍效果
+
+    // Only apply beat effects to non-empty positions
     const nonEmptyKeys = Object.keys(this.zeroGrid).filter(key => !this.zeroGrid[key].isEmpty);
 
     if (nonEmptyKeys.length === 0) return;
@@ -545,61 +545,61 @@ class BackgroundNumbersManager {
       const zeroState = this.zeroGrid[key];
       if (!zeroState || zeroState.isEmpty) return;
 
-      // 随机化过渡时间，创造更有机的节拍效果
-      const transitionDuration = 0.08 + Math.random() * 0.08; // 0.08-0.16s之间随机
+      // Randomize transition time for more organic beat effects
+      const transitionDuration = 0.08 + Math.random() * 0.08; // Random between 0.08-0.16s
       const easingTypes = ['ease-out', 'ease-in-out', 'ease-in', 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'];
       const randomEasing = easingTypes[Math.floor(Math.random() * easingTypes.length)];
       zeroState.element.style.transition = `color ${transitionDuration}s ${randomEasing}, -webkit-text-stroke ${transitionDuration}s ${randomEasing}, opacity ${transitionDuration}s ${randomEasing}`;
 
-      // 创建多种随机的节拍反应模式
+      // Create multiple random beat reaction patterns
       const beatPattern = Math.random();
-      const intensityMultiplier = 0.3 + Math.random() * 0.7; // 0.3-1.0的随机强度倍数
+      const intensityMultiplier = 0.3 + Math.random() * 0.7; // Random intensity multiplier 0.3-1.0
       
       if (beatPattern < 0.4) {
-        // 模式1：纯透明度闪烁（40%几率）
+        // Pattern 1: Pure opacity flicker (40% chance)
         const opacityBoost = strength * intensityMultiplier * 0.6;
-        const randomBoost = Math.random() * 0.3; // 额外随机增强
+        const randomBoost = Math.random() * 0.3; // Additional random boost
         zeroState.opacity = Math.min(0.9, zeroState.opacity + opacityBoost + randomBoost);
         
       } else if (beatPattern < 0.7) {
-        // 模式2：透明度+轮廓切换（30%几率）
+        // Pattern 2: Opacity + outline switching (30% chance)
         const opacityBoost = strength * intensityMultiplier * 0.4;
         const randomBoost = Math.random() * 0.25;
         zeroState.opacity = Math.min(0.85, zeroState.opacity + opacityBoost + randomBoost);
         
-        // 50%几率切换轮廓
+        // 50% chance to switch outline
         if (Math.random() < 0.5) {
           zeroState.isOutline = !zeroState.isOutline;
         }
         
       } else if (beatPattern < 0.85) {
-        // 模式3：随机透明度设置（15%几率）
+        // Pattern 3: Random opacity setting (15% chance)
         const randomOpacity = Math.random();
         if (randomOpacity < 0.3) {
-          zeroState.opacity = 0.6 + Math.random() * 0.3; // 高亮
+          zeroState.opacity = 0.6 + Math.random() * 0.3; // Bright
         } else if (randomOpacity < 0.6) {
-          zeroState.opacity = 0.3 + Math.random() * 0.3; // 中等
+          zeroState.opacity = 0.3 + Math.random() * 0.3; // Medium
         } else {
-          zeroState.opacity = 0.1 + Math.random() * 0.2; // 暗淡
+          zeroState.opacity = 0.1 + Math.random() * 0.2; // Dim
         }
         
       } else {
-        // 模式4：极端反应（15%几率）- 创造戏剧性效果
+        // Pattern 4: Extreme reaction (15% chance) - creates dramatic effects
         if (Math.random() < 0.5) {
-          // 极亮
+          // Extremely bright
           zeroState.opacity = 0.8 + Math.random() * 0.2;
-          zeroState.isOutline = Math.random() < 0.3; // 30%几率变轮廓
+          zeroState.isOutline = Math.random() < 0.3; // 30% chance to become outline
         } else {
-          // 极暗后快速恢复
+          // Extremely dark with quick recovery
           zeroState.opacity = 0.02 + Math.random() * 0.08;
           
-          // 延迟恢复效果
+          // Delayed recovery effect
           setTimeout(() => {
             if (this.zeroGrid[key]) {
               this.zeroGrid[key].opacity = 0.4 + Math.random() * 0.3;
               this.updateZeroDisplay(key);
             }
-          }, 50 + Math.random() * 100); // 50-150ms延迟
+          }, 50 + Math.random() * 100); // 50-150ms delay
         }
       }
 
@@ -610,10 +610,10 @@ class BackgroundNumbersManager {
   private resetTransitionStyles() {
     if (!this.audioReactiveState.transientActive && !this.audioReactiveState.beatActive) {
       Object.values(this.zeroGrid).forEach(zeroState => {
-        // 只重置非空位置的过渡样式
+        // Only reset transition styles for non-empty positions
         if (!zeroState.isEmpty) {
           zeroState.element.style.transition = 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
-          // 重新应用正确的渐变颜色
+          // Reapply correct gradient color
           const gradientColor = this.calculateGradientColor(zeroState.element);
           this.updateElementStyle(zeroState.element, zeroState.isOutline, gradientColor, this.numbersVisible ? zeroState.opacity : 0);
         }
@@ -630,14 +630,14 @@ class BackgroundNumbersManager {
   private updateAllZerosContent() {
     const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
     Object.values(this.zeroGrid).forEach(zeroState => {
-      // 只更新非空位置的内容
+      // Only update content for non-empty positions
       if (!zeroState.isEmpty) {
         zeroState.element.textContent = displayNumber;
       }
     });
   }
 
-  // 辅助方法：保存当前状态以便在resize时恢复
+  // Helper method: preserve current states for resize recovery
   private preserveCurrentStates(): { [key: string]: { isOutline: boolean; opacity: number; isEmpty: boolean } } {
     const states: { [key: string]: { isOutline: boolean; opacity: number; isEmpty: boolean } } = {};
     
@@ -653,18 +653,18 @@ class BackgroundNumbersManager {
     return states;
   }
 
-  // 辅助方法：获取现有的空位置
+  // Helper method: get existing empty positions
   private getExistingEmptyPositions(oldGrid: { [key: string]: ZeroState }, newRows: number, newCols: number): Set<number> {
     const emptyPositions = new Set<number>();
     
-    // 遍历旧网格，找出空位置，并尝试映射到新网格
+    // Traverse old grid, find empty positions, and try to map to new grid
     Object.keys(oldGrid).forEach(key => {
       if (oldGrid[key].isEmpty) {
         const [rowStr, colStr] = key.split('-');
         const row = parseInt(rowStr);
         const col = parseInt(colStr);
         
-        // 如果旧位置在新网格范围内，保持为空
+        // If old position is within new grid bounds, keep it empty
         if (row < newRows && col < newCols) {
           const positionIndex = row * newCols + col;
           emptyPositions.add(positionIndex);
@@ -675,17 +675,17 @@ class BackgroundNumbersManager {
     return emptyPositions;
   }
 
-  // 辅助方法：重新分布空位置
+  // Helper method: redistribute empty positions
   private redistributeEmptyPositions(existingEmptyPositions: Set<number>, totalPositions: number, targetEmptyCount: number): Set<number> {
     const emptyPositions = new Set(existingEmptyPositions);
     
-    // 如果现有空位置太少，添加更多
+    // If too few empty positions exist, add more
     while (emptyPositions.size < targetEmptyCount) {
       const randomIndex = Math.floor(Math.random() * totalPositions);
       emptyPositions.add(randomIndex);
     }
     
-    // 如果现有空位置太多，随机移除一些
+    // If too many empty positions exist, randomly remove some
     while (emptyPositions.size > targetEmptyCount) {
       const positionsArray = Array.from(emptyPositions);
       const randomIndex = Math.floor(Math.random() * positionsArray.length);
@@ -695,7 +695,7 @@ class BackgroundNumbersManager {
     return emptyPositions;
   }
 
-  // 辅助方法：创建带有指定状态的元素
+  // Helper method: create element with specified state
   private createZeroElementWithState(
     key: string, 
     x: number, 
@@ -717,7 +717,7 @@ class BackgroundNumbersManager {
     const hexGray = grayValue.toString(16).padStart(2, '0');
     const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
 
-    // 设置样式
+    // Set styles
     element.style.position = 'absolute';
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
@@ -726,12 +726,12 @@ class BackgroundNumbersManager {
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
-    element.style.opacity = '0'; // 初始隐藏，稍后根据可见性状态更新
+    element.style.opacity = '0'; // Initially hidden, will update based on visibility state later
     element.style.transition = 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
 
     this.updateElementStyle(element, isOutline, zeroColor, 0);
 
-    // 设置内容
+    // Set content
     if (!isEmpty) {
       element.textContent = displayNumber;
     } else {
@@ -748,24 +748,24 @@ class BackgroundNumbersManager {
     };
   }
 
-  // 公共方法：响应窗口大小变化
+  // Public method: handle window resize
   public handleResize() {
     if (!this.container) return;
 
-    // 保存当前状态
+    // Preserve current state
     const previousStates = this.preserveCurrentStates();
     const wasVisible = this.numbersVisible;
     const currentDisplayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
 
-    // 获取新的视口尺寸
+    // Get new viewport dimensions
     const { width, height } = this.getViewportDimensions();
     
-    // 清除现有元素但保留状态
+    // Clear existing elements but preserve state
     this.container.innerHTML = '';
     const oldGrid = { ...this.zeroGrid };
     this.zeroGrid = {};
 
-    // 重新计算网格
+    // Recalculate grid
     const startX = -this.OVERFLOW;
     const endX = width + this.OVERFLOW;
     const startY = -this.OVERFLOW;
@@ -774,15 +774,15 @@ class BackgroundNumbersManager {
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
 
-    // 计算总位置数和需要空着的位置数
+    // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
     const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
 
-    // 尝试保持现有的空位置模式，或生成新的
+    // Try to maintain existing empty position patterns or generate new ones
     const existingEmptyPositions = this.getExistingEmptyPositions(oldGrid, rows, cols);
     const emptyPositions = this.redistributeEmptyPositions(existingEmptyPositions, totalPositions, emptyPositionsCount);
 
-    // 重新生成网格，尽可能保持现有状态
+    // Regenerate grid while preserving existing states as much as possible
     let positionIndex = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -791,7 +791,7 @@ class BackgroundNumbersManager {
         const zeroKey = `${row}-${col}`;
         const isEmpty = emptyPositions.has(positionIndex);
 
-        // 尝试从之前的状态中恢复
+        // Try to restore from previous state
         const previousState = previousStates[zeroKey];
         const isOutline = previousState?.isOutline ?? Math.random() < 0.5;
         const opacity = previousState?.opacity ?? 0.25;
@@ -801,12 +801,12 @@ class BackgroundNumbersManager {
       }
     }
 
-    // 恢复可见性状态
+    // Restore visibility state
     this.numbersVisible = wasVisible;
     this.updateAllZerosVisibility();
   }
 
-  // 公共方法：清理资源
+  // Public method: cleanup resources
   public destroy() {
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);

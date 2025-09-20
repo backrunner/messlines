@@ -1,11 +1,11 @@
-// 音乐平台跳转链接配置
+// Music platform link configuration
 export interface MusicPlatformLink {
   name: string;
   url: string;
-  icon: string; // 图标名称
+  icon: string;
 }
 
-// MessLines 音乐平台链接配置
+// MessLines music platform links
 export const MUSIC_PLATFORM_LINKS: MusicPlatformLink[] = [
   {
     name: 'YouTube Music',
@@ -24,7 +24,7 @@ export const MUSIC_PLATFORM_LINKS: MusicPlatformLink[] = [
   }
 ];
 
-// MessLines 品牌信息
+// MessLines brand information
 export const BRAND_CONFIG = {
   name: 'MessLines'
 };

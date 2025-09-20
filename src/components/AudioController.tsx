@@ -24,46 +24,46 @@ const AudioController = () => {
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
 
-  // 音频反应回调的引用 - 使用稳定的引用对象
+  // Audio reactive callbacks reference - stable reference object
   const audioReactiveCallbacks = useRef({
     onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => {},
     onBeat: (strength: number) => {},
   });
 
-  // 纯JavaScript音频分析器实例
+  // Pure JavaScript audio analyzer instance
   const audioAnalyzerRef = useRef<PureAudioAnalyzer | null>(null);
 
-  // 处理音轨变化
+  // Handle track change
   const handleTrackChange = useCallback((track: AudioTrack, trackIndex: number) => {
     setCurrentTrack(track);
     setCurrentTrackIndex(trackIndex);
   }, []);
 
-  // 处理播放状态变化
+  // Handle play state change
   const handlePlayStateChange = useCallback((state: PlayState) => {
     setPlayState(state);
 
-    // 更新纯JavaScript音频分析器的播放状态
+    // Update pure JavaScript audio analyzer play state
     if (audioAnalyzerRef.current) {
       audioAnalyzerRef.current.setPlayState(state);
     }
   }, []);
 
-  // 处理自动播放被阻止
+  // Handle autoplay blocked
   const handleAutoplayBlocked = useCallback((blocked: boolean) => {
     setAutoplayBlocked(blocked);
   }, []);
 
-  // 处理音频控制器就绪
+  // Handle audio controls ready
   const handleControlsReady = useCallback((controls: AudioControls) => {
     setAudioControls(controls);
   }, []);
 
-  // 处理音频元素就绪
+  // Handle audio element ready
   const handleAudioElementReady = useCallback((element: HTMLAudioElement | null) => {
     setAudioElement(element);
 
-    // 初始化纯JavaScript音频分析器
+    // Initialize pure JavaScript audio analyzer
     if (element && !audioAnalyzerRef.current) {
       audioAnalyzerRef.current = new PureAudioAnalyzer({
         onTransientDetected: (intensity: number, frequency: 'low' | 'mid' | 'high') => {
@@ -79,7 +79,7 @@ const AudioController = () => {
     }
   }, []);
 
-  // 清理音频分析器资源
+  // Cleanup audio analyzer resources
   const cleanupAudioAnalyzer = useCallback(() => {
     if (audioAnalyzerRef.current) {
       audioAnalyzerRef.current.destroy();
@@ -87,18 +87,18 @@ const AudioController = () => {
     }
   }, []);
 
-  // 处理初始播放请求（处理自动播放限制）
+  // Handle initial play request (handle autoplay restrictions)
   const handleInitialPlay = useCallback(() => {
     if (audioControls && (playState === PlayState.STOPPED || autoplayBlocked)) {
-      setAutoplayBlocked(false); // 用户交互后重置自动播放阻止状态
+      setAutoplayBlocked(false); // Reset autoplay block state after user interaction
       audioControls.togglePlayPause();
     }
   }, [audioControls, playState, autoplayBlocked]);
 
-  // 计算动画是否应该暂停
+  // Calculate if animation should be paused
   const isAnimationPaused = playState === PlayState.PAUSED;
 
-  // 组件清理
+  // Component cleanup
   React.useEffect(() => {
     return () => {
       cleanupAudioAnalyzer();
@@ -107,19 +107,19 @@ const AudioController = () => {
 
   return (
     <>
-      {/* 音频管理器 - 处理所有音频播放逻辑 */}
+      {/* Audio Manager - handles all audio playback logic */}
       <AudioManager onTrackChange={handleTrackChange} onPlayStateChange={handlePlayStateChange} onControlsReady={handleControlsReady} onAudioElementReady={handleAudioElementReady} onAutoplayBlocked={handleAutoplayBlocked} />
 
-      {/* 用户交互控制器 - 处理键盘和触摸事件 */}
+      {/* User Interaction Controller - handles keyboard and touch events */}
       {audioControls && <UserInteractionController playState={playState} onTogglePlayPause={audioControls.togglePlayPause} onNextTrack={audioControls.nextTrack} onPrevTrack={audioControls.prevTrack} onInitialPlay={autoplayBlocked ? handleInitialPlay : undefined} />}
 
-      {/* 暂停指示器 - 左上角显示暂停图标 */}
+      {/* Pause Indicator - shows pause icon in top left */}
       <PauseIndicator playState={playState} />
 
-      {/* 播放指示器 - 右上角显示播放按钮（仅当自动播放被阻止时） */}
+      {/* Play Indicator - shows play button in top right (only when autoplay is blocked) */}
       {autoplayBlocked && <PlayIndicator playState={playState} onPlay={handleInitialPlay} />}
 
-      {/* 纯JavaScript音频可视化器 - 高性能，无React重新渲染 */}
+      {/* Pure JavaScript Audio Visualizer - high performance, no React re-renders */}
       <PureAudioVisualizer currentTrack={currentTrack} currentTrackIndex={currentTrackIndex} playState={playState} isAnimationPaused={isAnimationPaused} audioReactiveCallbacks={audioReactiveCallbacks} />
     </>
   );

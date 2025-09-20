@@ -1,6 +1,6 @@
 /**
- * 纯JavaScript线条球动画管理器
- * 完全脱离React状态管理，直接操作DOM，获得最佳性能
+ * Pure JavaScript line ball animation manager
+ * Completely independent from React state management, directly manipulates DOM for optimal performance
  */
 
 interface Point {
@@ -85,14 +85,14 @@ class PureLineBallAnimation {
   }
 
   private createSVG() {
-    // 创建SVG元素
+    // Create SVG element
     this.svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svgElement.style.width = '100%';
     this.svgElement.style.height = '100%';
     this.svgElement.style.display = 'block';
     this.svgElement.style.position = 'relative';
 
-    // 创建defs用于渐变和滤镜
+    // Create defs for gradients and filters
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
     filter.setAttribute('id', 'trailBlur');
@@ -102,7 +102,7 @@ class PureLineBallAnimation {
     defs.appendChild(filter);
     this.svgElement.appendChild(defs);
 
-    // 创建隐形边界圆圈
+    // Create invisible boundary circle
     this.circleElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     this.circleElement.setAttribute('stroke', 'none');
     this.circleElement.setAttribute('fill', 'none');
@@ -116,7 +116,7 @@ class PureLineBallAnimation {
     this.dimensions.width = window.innerWidth;
     this.dimensions.height = window.innerHeight;
 
-    // 更新圆圈位置
+    // Update circle position
     const centerX = this.dimensions.width / 2;
     const centerY = this.dimensions.height / 2;
     this.circleElement.setAttribute('cx', centerX.toString());
@@ -132,7 +132,7 @@ class PureLineBallAnimation {
   }
 
   private repositionLines() {
-    // 重新定位现有线条以适应新的尺寸
+    // Reposition existing lines to fit new dimensions
     this.lines.forEach(line => {
       if (line.state === 'entering') {
         this.generateNewPath(line);
@@ -148,12 +148,12 @@ class PureLineBallAnimation {
   }
 
   private startLineSpawning() {
-    // 初始生成线条
+    // Generate initial lines
     for (let i = 0; i < this.MAX_FLYING_LINES; i++) {
       setTimeout(() => this.spawnLine(), i * this.LINE_SPAWN_INTERVAL);
     }
 
-    // 持续生成线条
+    // Continue generating lines
     this.spawnInterval = window.setInterval(() => {
       const flyingInLines = this.lines.filter(line => line.state === 'entering').length;
       const totalLines = this.lines.length;
@@ -199,7 +199,7 @@ class PureLineBallAnimation {
 
     const path = this.generateMessyPath(startPoint, targetPoint);
 
-    // 创建轨迹SVG元素
+    // Create trail SVG element
     const trailElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     this.svgElement.appendChild(trailElement);
 
@@ -354,7 +354,7 @@ class PureLineBallAnimation {
   }
 
   private generateNewPath(line: FlyingLine) {
-    // 为线条生成新路径
+    // Generate new path for line
     const centerX = this.dimensions.width / 2;
     const centerY = this.dimensions.height / 2;
     const targetAngle = Math.random() * Math.PI * 2;
@@ -502,13 +502,13 @@ class PureLineBallAnimation {
 
     const now = Date.now();
 
-    // 更新呼吸渐变效果
+    // Update breathing gradient effect
     this.updateBreathingGradient(now);
 
-    // 更新所有线条
+    // Update all lines
     this.lines.forEach(line => this.updateLine(line));
 
-    // 清理超出限制的线条
+    // Clean up lines that exceed limits
     this.enforceLimits();
 
     this.animationFrameId = requestAnimationFrame(this.animate);
@@ -520,7 +520,7 @@ class PureLineBallAnimation {
     const breathing = Math.sin(now * breathingSpeed) * breathingAmplitude;
     this.gradientOffset = 40 + breathing;
 
-    // 直接更新容器的父元素背景
+    // Update container's parent element background directly
     const parentElement = this.container.parentElement;
     if (parentElement) {
       parentElement.style.background = `linear-gradient(to top, #0a0a0a ${this.gradientOffset}%, #000000)`;
@@ -541,58 +541,58 @@ class PureLineBallAnimation {
       line.progress = 1.0;
     }
 
-    // 计算新位置和方向
+    // Calculate new position and direction
     const newPosition = this.interpolateBezierPoint(currentSegment, line.progress);
     const newDirection = this.calculateBezierDirection(currentSegment, line.progress);
 
     line.currentPosition = newPosition;
     line.direction = newDirection;
 
-    // 更新轨迹
+    // Update trail
     this.updateTrail(line, newPosition);
 
-    // 检查边界弹跳（在状态转换之前）
+    // Check boundary bounce (before state transition)
     if ((line.state === 'in_center' || line.state === 'transitioning') && this.isNearBoundary(newPosition, 20)) {
-      // 增加阈值以便更早检测
-      // 击中边界 - 创建轻柔的偏转而不是尖锐的弹跳
+      // Increase threshold for earlier detection
+      // Hit boundary - create gentle deflection instead of sharp bounce
       const centerX = this.dimensions.width / 2;
       const centerY = this.dimensions.height / 2;
 
-      // 计算当前运动方向
+      // Calculate current movement direction
       const currentDirection = line.direction || { x: 1, y: 0 };
       const currentDirectionAngle = Math.atan2(currentDirection.y, currentDirection.x);
 
-      // 创建轻柔的偏转，保持流动方向
-      const deflectionAngle = (Math.random() - 0.5) * Math.PI * 0.4; // 更小的偏转角度
+      // Create gentle deflection, maintaining flow direction
+      const deflectionAngle = (Math.random() - 0.5) * Math.PI * 0.4; // Smaller deflection angle
       const gentleDeflectionAngle = currentDirectionAngle + deflectionAngle;
 
-      // 计算安全目标，轻柔地向内弯曲
-      const deflectionDistance = 35 + Math.random() * 25; // 35-60px向前
-      const inwardBias = 10 + Math.random() * 15; // 10-25px向内偏移
+      // Calculate safe target, gently curving inward
+      const deflectionDistance = 35 + Math.random() * 25; // 35-60px forward
+      const inwardBias = 10 + Math.random() * 15; // 10-25px inward offset
 
-      // 继续向前但略微向内弯曲的目标点
+      // Continue forward but slightly curve inward target point
       const forwardX = newPosition.x + Math.cos(gentleDeflectionAngle) * deflectionDistance;
       const forwardY = newPosition.y + Math.sin(gentleDeflectionAngle) * deflectionDistance;
 
-      // 向中心添加内向偏移
+      // Add inward bias toward center
       const toCenterAngle = Math.atan2(centerY - newPosition.y, centerX - newPosition.x);
       const deflectionTarget = {
         x: forwardX + Math.cos(toCenterAngle) * inwardBias,
         y: forwardY + Math.sin(toCenterAngle) * inwardBias,
       };
 
-      // 确保目标在安全边界内
+      // Ensure target is within safe boundaries
       const distanceFromCenter = Math.sqrt((deflectionTarget.x - centerX) ** 2 + (deflectionTarget.y - centerY) ** 2);
       if (distanceFromCenter > this.CIRCLE_RADIUS - 30) {
-        // 投影到安全位置，同时保持一般方向
+        // Project to safe position while maintaining general direction
         const targetAngle = Math.atan2(deflectionTarget.y - centerY, deflectionTarget.x - centerX);
         const safeRadius = this.CIRCLE_RADIUS - 35;
         deflectionTarget.x = centerX + Math.cos(targetAngle) * safeRadius;
         deflectionTarget.y = centerY + Math.sin(targetAngle) * safeRadius;
       }
 
-      // 为平滑偏转创建非常轻柔的弧线
-      const gentleCurvature = 0.15 + Math.random() * 0.15; // 非常轻柔的曲线 (0.15-0.3)
+      // Create very gentle arc for smooth deflection
+      const gentleCurvature = 0.15 + Math.random() * 0.15; // Very gentle curves (0.15-0.3)
       const deflectionPath = this.generatePathSegment(newPosition, deflectionTarget, gentleCurvature);
       line.path = [deflectionPath];
       line.currentPathIndex = 0;
@@ -600,7 +600,7 @@ class PureLineBallAnimation {
       line.bounceCount++;
     }
 
-    // 处理状态转换
+    // Handle state transitions
     if (line.progress >= 1.0) {
       line.currentPathIndex++;
       line.progress = 0;
@@ -891,7 +891,7 @@ class PureLineBallAnimation {
     }
   }
 
-  // 公共方法
+  // Public methods
   public pause() {
     this.isPaused = true;
   }
