@@ -1,5 +1,5 @@
 import { SecureAudioClient } from 'secstream/client';
-import type { SecureAudioPlayer } from 'secstream/client';
+import { SecureAudioPlayer } from 'secstream/client';
 import { ArtistPageTransport } from '../transport/ArtistPageTransport';
 import { SECSTREAM_CONFIG } from '../constants/playlist';
 import type { AudioTrack } from '../constants/playlist';
@@ -38,7 +38,7 @@ export class SecStreamService {
       console.log(`🔐 Creating secure session for track: ${track.title}`);
       this.currentSessionId = await this.transport.createSessionFromTrack(track.audioKey);
 
-      this.player = await this.client.createPlayer(this.currentSessionId);
+      this.player = new SecureAudioPlayer(this.client);
 
       const secureUrl = this.createSecureAudioProxy();
 
@@ -63,6 +63,10 @@ export class SecStreamService {
 
   getPlayer(): SecureAudioPlayer | null {
     return this.player;
+  }
+
+  getAudioContext(): AudioContext | null {
+    return this.client ? this.client.getAudioContext() : null;
   }
 
   static isSecStreamUrl(url: string): boolean {
@@ -111,7 +115,7 @@ export class SecStreamService {
     }
 
     try {
-      this.player.setCurrentTime(time);
+      await this.player.seekToTime(time);
     } catch (error) {
       console.error('❌ SecStream seek failed:', error);
       throw error;
@@ -119,19 +123,19 @@ export class SecStreamService {
   }
 
   getCurrentTime(): number {
-    return this.player ? this.player.getCurrentTime() : 0;
+    return this.player ? this.player.currentTime : 0;
   }
 
   getDuration(): number {
-    return this.player ? this.player.getDuration() : 0;
+    return this.player ? this.player.duration : 0;
   }
 
   isPlaying(): boolean {
-    return this.player ? this.player.getIsPlaying() : false;
+    return this.player ? this.player.isPlaying : false;
   }
 
   isPaused(): boolean {
-    return this.player ? this.player.getIsPaused() : false;
+    return this.player ? this.player.isPaused : false;
   }
 
   addEventListener(event: string, listener: EventListener): void {

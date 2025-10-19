@@ -59,24 +59,19 @@ const AudioController = () => {
     setAudioControls(controls);
   }, []);
 
-  // Handle audio element ready
-  const handleAudioElementReady = useCallback((element: HTMLAudioElement | null) => {
-    setAudioElement(element);
-
-    // Initialize pure JavaScript audio analyzer
-    if (element && !audioAnalyzerRef.current) {
-      audioAnalyzerRef.current = new PureAudioAnalyzer({
-        onTransientDetected: (intensity: number, frequency: 'low' | 'mid' | 'high') => {
-          audioReactiveCallbacks.current.onTransient(intensity, frequency);
-        },
-        onBeatDetected: (strength: number) => {
-          audioReactiveCallbacks.current.onBeat(strength);
-        },
-      });
-      audioAnalyzerRef.current.setAudioElement(element);
-    } else if (audioAnalyzerRef.current) {
-      audioAnalyzerRef.current.setAudioElement(element);
+  // Handle SecStream audio context ready
+  const handleSecStreamReady = useCallback((audioContext: AudioContext) => {
+    // Connect audio reactive callbacks for visualizations
+    if (typeof window !== 'undefined' && (window as any).audioReactiveCallbacks) {
+      const callbacks = (window as any).audioReactiveCallbacks;
+      callbacks.current.onTransient = (intensity: number, frequency: 'low' | 'mid' | 'high') => {
+        audioReactiveCallbacks.current.onTransient(intensity, frequency);
+      };
+      callbacks.current.onBeat = (strength: number) => {
+        audioReactiveCallbacks.current.onBeat(strength);
+      };
     }
+    console.log('✅ SecStream audio context connected to visualizations');
   }, []);
 
   // Cleanup audio analyzer resources
@@ -108,7 +103,7 @@ const AudioController = () => {
   return (
     <>
       {/* Audio Manager - handles all audio playback logic */}
-      <AudioManager onTrackChange={handleTrackChange} onPlayStateChange={handlePlayStateChange} onControlsReady={handleControlsReady} onAudioElementReady={handleAudioElementReady} onAutoplayBlocked={handleAutoplayBlocked} />
+      <AudioManager onTrackChange={handleTrackChange} onPlayStateChange={handlePlayStateChange} onControlsReady={handleControlsReady} onSecStreamReady={handleSecStreamReady} onAutoplayBlocked={handleAutoplayBlocked} />
 
       {/* User Interaction Controller - handles keyboard and touch events */}
       {audioControls && <UserInteractionController playState={playState} onTogglePlayPause={audioControls.togglePlayPause} onNextTrack={audioControls.nextTrack} onPrevTrack={audioControls.prevTrack} onInitialPlay={autoplayBlocked ? handleInitialPlay : undefined} />}

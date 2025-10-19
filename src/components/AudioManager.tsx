@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { AUDIO_PLAYLIST, AUDIO_CONFIG, PlayMode, PlayState } from '../constants/playlist';
+import { AUDIO_PLAYLIST, AUDIO_CONFIG, PlayState } from '../constants/playlist';
 import type { AudioTrack } from '../constants/playlist';
 import { SecStreamService } from '../services/SecStreamService';
+import PureAudioAnalyzer from './PureAudioAnalyzer';
 
 interface AudioManagerProps {
   onTrackChange?: (track: AudioTrack, trackIndex: number) => void;
   onPlayStateChange?: (state: PlayState) => void;
   onControlsReady?: (controls: AudioControls) => void;
-  onAudioElementReady?: (audioElement: HTMLAudioElement | null) => void;
+  onSecStreamReady?: (audioContext: AudioContext) => void;
   onAutoplayBlocked?: (blocked: boolean) => void;
 }
 
@@ -28,23 +29,43 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAudioElementReady, onAutoplayBlocked }: AudioManagerProps) => {
+const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSecStreamReady, onAutoplayBlocked }: AudioManagerProps) => {
   const secStreamRef = useRef<SecStreamService | null>(null);
+  const audioAnalyzerRef = useRef<PureAudioAnalyzer | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
-  const [playMode, setPlayMode] = useState<PlayMode>(PlayMode.SHUFFLE);
   const [shuffledPlaylist, setShuffledPlaylist] = useState<AudioTrack[]>([]);
-  const [playedTracks, setPlayedTracks] = useState<Set<number>>(new Set());
   const [volume, setVolume] = useState<number>(AUDIO_CONFIG.volume);
   const isInitializedRef = useRef(false);
 
+  // Audio reactive callbacks reference
+  const audioReactiveCallbacks = useRef({
+    onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => {},
+    onBeat: (strength: number) => {},
+  });
+
+  // Initialize SecStream audio analyzer on component mount
   useEffect(() => {
     secStreamRef.current = new SecStreamService();
+
+    // Initialize audio analyzer for SecStream only
+    audioAnalyzerRef.current = new PureAudioAnalyzer({
+      onTransientDetected: (intensity: number, frequency: 'low' | 'mid' | 'high') => {
+        audioReactiveCallbacks.current.onTransient(intensity, frequency);
+      },
+      onBeatDetected: (strength: number) => {
+        audioReactiveCallbacks.current.onBeat(strength);
+      },
+    });
 
     return () => {
       if (secStreamRef.current) {
         secStreamRef.current.destroy();
         secStreamRef.current = null;
+      }
+      if (audioAnalyzerRef.current) {
+        audioAnalyzerRef.current.destroy();
+        audioAnalyzerRef.current = null;
       }
     };
   }, []);
@@ -55,16 +76,47 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     if (AUDIO_CONFIG.shufflePlay) {
       const shuffled = shuffleArray(AUDIO_PLAYLIST);
       setShuffledPlaylist(shuffled);
-      setCurrentTrackIndex(0);
     } else {
       setShuffledPlaylist(AUDIO_PLAYLIST);
-      setCurrentTrackIndex(0);
     }
+    setCurrentTrackIndex(0);
   }, []);
 
   const getCurrentTrack = useCallback((): AudioTrack | null => {
     if (shuffledPlaylist.length === 0) return null;
     return shuffledPlaylist[currentTrackIndex] || null;
+  }, [shuffledPlaylist, currentTrackIndex]);
+
+  const playNext = useCallback(() => {
+    if (shuffledPlaylist.length === 0) return;
+
+    let nextIndex = currentTrackIndex + 1;
+
+    if (nextIndex >= shuffledPlaylist.length) {
+      if (AUDIO_CONFIG.loop) {
+        const newShuffled = shuffleArray(AUDIO_PLAYLIST);
+        setShuffledPlaylist(newShuffled);
+        nextIndex = 0;
+      } else {
+        setPlayState(PlayState.STOPPED);
+        onPlayStateChange?.(PlayState.STOPPED);
+        return;
+      }
+    }
+
+    setCurrentTrackIndex(nextIndex);
+  }, [shuffledPlaylist, currentTrackIndex, onPlayStateChange]);
+
+  const playPrev = useCallback(() => {
+    if (shuffledPlaylist.length === 0) return;
+
+    let prevIndex = currentTrackIndex - 1;
+
+    if (prevIndex < 0) {
+      prevIndex = shuffledPlaylist.length - 1;
+    }
+
+    setCurrentTrackIndex(prevIndex);
   }, [shuffledPlaylist, currentTrackIndex]);
 
   const playTrack = useCallback(
@@ -81,6 +133,13 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
 
         secStreamRef.current.setVolume(volume);
 
+        // Connect audio analysis to SecStream's audio context
+        const audioContext = secStreamRef.current.getAudioContext();
+        if (audioContext && audioAnalyzerRef.current) {
+          audioAnalyzerRef.current.setSecStreamAudioContext(audioContext);
+          onSecStreamReady?.(audioContext);
+        }
+
         const handleSecStreamEnded = () => {
           playNext();
         };
@@ -96,16 +155,17 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
           console.log('Current time:', customEvent.detail?.currentTime);
         };
 
-        secStreamRef.current.addEventListener('ended', handleSecStreamEnded);
-        secStreamRef.current.addEventListener('error', handleSecStreamError);
-        secStreamRef.current.addEventListener('timeupdate', handleSecStreamTimeUpdate);
+        const player = secStreamRef.current.getPlayer();
+        if (player) {
+          player.addEventListener('ended', handleSecStreamEnded);
+          player.addEventListener('error', handleSecStreamError);
+          player.addEventListener('timeupdate', handleSecStreamTimeUpdate);
+        }
 
         await secStreamRef.current.play();
 
         setPlayState(PlayState.PLAYING);
         setCurrentTrackIndex(trackIndex);
-
-        setPlayedTracks((prev) => new Set(prev).add(track.id));
 
         onTrackChange?.(track, trackIndex);
         onPlayStateChange?.(PlayState.PLAYING);
@@ -123,41 +183,8 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
         }
       }
     },
-    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange]
+    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, playNext]
   );
-
-  const playNext = useCallback(() => {
-    if (shuffledPlaylist.length === 0) return;
-
-    let nextIndex = currentTrackIndex + 1;
-
-    if (nextIndex >= shuffledPlaylist.length) {
-      if (AUDIO_CONFIG.loop) {
-        const newShuffled = shuffleArray(AUDIO_PLAYLIST);
-        setShuffledPlaylist(newShuffled);
-        setPlayedTracks(new Set());
-        nextIndex = 0;
-      } else {
-        setPlayState(PlayState.STOPPED);
-        onPlayStateChange?.(PlayState.STOPPED);
-        return;
-      }
-    }
-
-    playTrack(nextIndex);
-  }, [shuffledPlaylist, currentTrackIndex, playTrack, onPlayStateChange]);
-
-  const playPrev = useCallback(() => {
-    if (shuffledPlaylist.length === 0) return;
-
-    let prevIndex = currentTrackIndex - 1;
-
-    if (prevIndex < 0) {
-      prevIndex = shuffledPlaylist.length - 1;
-    }
-
-    playTrack(prevIndex);
-  }, [shuffledPlaylist, currentTrackIndex, playTrack]);
 
   const stop = useCallback(() => {
     if (secStreamRef.current) {
@@ -166,6 +193,13 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
       onPlayStateChange?.(PlayState.STOPPED);
     }
   }, [onPlayStateChange]);
+
+  // Auto-play track when currentTrackIndex changes
+  useEffect(() => {
+    if (shuffledPlaylist.length > 0 && (playState === PlayState.PLAYING || playState === PlayState.LOADING)) {
+      playTrack(currentTrackIndex);
+    }
+  }, [currentTrackIndex, shuffledPlaylist, playState, playTrack]);
 
   const togglePlayPause = useCallback(() => {
     if (!secStreamRef.current) return;
@@ -216,9 +250,19 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onAud
     onControlsReady?.(controls);
   }, [onControlsReady, controls]);
 
+  // Update audio analyzer play state
   useEffect(() => {
-    onAudioElementReady?.(null);
-  }, [onAudioElementReady]);
+    if (audioAnalyzerRef.current) {
+      audioAnalyzerRef.current.setPlayState(playState);
+    }
+  }, [playState]);
+
+  // Expose SecStream audio reactive callbacks globally for visualizations
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).audioReactiveCallbacks = audioReactiveCallbacks;
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

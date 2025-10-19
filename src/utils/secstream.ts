@@ -1,9 +1,8 @@
-import type { SessionManager } from 'secstream/server';
+import { SessionManager } from 'secstream/server';
 import { SECSTREAM_CONFIG } from '../constants/playlist';
 
 // Create session manager with configuration from playlist constants
 export function createSessionManager(): SessionManager {
-  const { SessionManager } = require('secstream/server');
 
   return new SessionManager({
     sliceDurationMs: SECSTREAM_CONFIG.sliceDurationMs,

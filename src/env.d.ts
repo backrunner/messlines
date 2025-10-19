@@ -1,12 +1,7 @@
-/// <reference types="@cloudflare/workers-types" />
+/// <reference types="../worker-configuration" />
 
-declare global {
-  interface Env {
-    AUDIO_BUCKET: R2Bucket;
-  }
+type Runtime = import('@astrojs/cloudflare').Runtime<Env>;
 
-  // Global Cloudflare Worker environment
-  const AUDIO_BUCKET: R2Bucket;
+declare namespace App {
+  interface Locals extends Runtime {}
 }
-
-export {};

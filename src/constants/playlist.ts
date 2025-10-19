@@ -1,3 +1,5 @@
+import type { CompressionLevel } from 'secstream';
+
 export interface AudioTrack {
   id: number;
   title: string;
@@ -17,7 +19,7 @@ export const AUDIO_PLAYLIST: AudioTrack[] = [
 
 export const SECSTREAM_CONFIG = {
   sliceDurationMs: 5000,
-  compressionLevel: 6,
+  compressionLevel: 6 as CompressionLevel,
   bufferSize: 5,
   prefetchSize: 3,
   maxFileSize: 100 * 1024 * 1024,

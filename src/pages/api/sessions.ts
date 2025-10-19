@@ -6,7 +6,7 @@ import { createSessionManager, AudioFileHandler } from '../../utils/secstream.js
 const sessionManager = createSessionManager();
 const audioHandler = new AudioFileHandler();
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   try {
     console.log('📥 Received session creation request');
 
@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     // Get R2 bucket from Cloudflare environment
-    const bucket = AUDIO_BUCKET;
+    const bucket = locals.runtime.env.AUDIO_BUCKET;
     if (!bucket) {
       console.error('❌ R2 bucket not available');
       return new Response(JSON.stringify({ error: 'Audio storage not available' }), {

@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import { AUDIO_PLAYLIST } from '../../constants/playlist.js';
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ locals }) => {
   try {
     // Get R2 bucket from Cloudflare environment
-    const bucket = AUDIO_BUCKET;
+    const bucket = locals.runtime.env.AUDIO_BUCKET;
 
     if (!bucket) {
       console.error('❌ R2 bucket not available');

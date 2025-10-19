@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { sessionManager } from '../../sessions';
+import { sessionManager } from '../../sessions.js';
 
 export const GET: APIRoute = async ({ params }) => {
   try {
