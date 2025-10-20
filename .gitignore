@@ -24,5 +24,6 @@ pnpm-debug.log*
 .idea/
 .history/
 
+.claude/settings.local.json
 .wrangler
 public/audios

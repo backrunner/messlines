@@ -55,11 +55,6 @@ class PureAudioAnalyzer {
   private playState: PlayState = PlayState.STOPPED;
   private callbacks: AudioAnalyzerCallbacks | null = null;
 
-  // Simulation components
-  private simulationInterval: ReturnType<typeof setInterval> | null = null;
-  private simulationOscillators: OscillatorNode[] | null = null;
-  private simulationGains: GainNode[] | null = null;
-
   constructor(callbacks?: AudioAnalyzerCallbacks) {
     this.callbacks = callbacks || null;
     this.setupGlobalControls();
@@ -76,90 +71,33 @@ class PureAudioAnalyzer {
     try {
       this.audioContext = audioContext;
 
-      // Create analyzer node
-      this.analyzer = this.audioContext.createAnalyser();
-      this.analyzer.fftSize = 2048;
-      this.analyzer.smoothingTimeConstant = 0.3;
-      this.analyzer.minDecibels = -90;
-      this.analyzer.maxDecibels = -10;
-
-      // Initialize data arrays
-      const bufferLength = this.analyzer.frequencyBinCount;
-      this.frequencyData = new Uint8Array(bufferLength);
-      this.previousFrequencyData = new Uint8Array(bufferLength);
-      this.timeData = new Uint8Array(bufferLength);
-
-      // Create a sophisticated audio simulation that responds to actual playback
-      this.createRealistcAudioSimulation();
-
-      console.log('✅ SecStream audio analyzer initialized with realistic simulation');
+      // Note: The analyzer node is created and connected in SecStreamService
+      // We just need to get it from the service through AudioManager
+      console.log('✅ SecStream audio context set, waiting for analyzer node connection');
     } catch (error) {
       console.error('❌ SecStream audio analyzer initialization failed:', error);
     }
   }
 
-  private createRealistcAudioSimulation() {
-    if (!this.audioContext || !this.analyzer) return;
+  /**
+   * Set the analyzer node that's already connected to the audio graph
+   * This is called by AudioManager after SecStreamService connects the analyzer
+   */
+  public setAnalyzerNode(analyzer: AnalyserNode) {
+    if (this.analyzer) {
+      this.analyzer.disconnect();
+    }
 
-    // Create multiple oscillators to simulate realistic music frequencies
-    const oscillators: OscillatorNode[] = [];
-    const gainNodes: GainNode[] = [];
-    const frequencies = [60, 120, 250, 500, 1000, 2000, 4000, 8000]; // Bass to treble
+    this.analyzer = analyzer;
+    this.audioContext = analyzer.context as AudioContext;
 
-    frequencies.forEach((freq, index) => {
-      const osc = this.audioContext!.createOscillator();
-      const gain = this.audioContext!.createGain();
+    // Initialize data arrays
+    const bufferLength = this.analyzer.frequencyBinCount;
+    this.frequencyData = new Uint8Array(bufferLength);
+    this.previousFrequencyData = new Uint8Array(bufferLength);
+    this.timeData = new Uint8Array(bufferLength);
 
-      osc.type = index < 2 ? 'sawtooth' : index < 4 ? 'square' : 'sine';
-      osc.frequency.value = freq;
-      gain.gain.value = 0.001 * (1 / (index + 1)); // Lower frequencies louder
-
-      osc.connect(gain);
-      gain.connect(this.analyzer!);
-
-      oscillators.push(osc);
-      gainNodes.push(gain);
-      osc.start();
-    });
-
-    // Create realistic music-like patterns
-    let beatTime = 0;
-    const updateInterval = setInterval(() => {
-      if (this.playState === PlayState.PLAYING) {
-        beatTime += 50;
-        const time = beatTime / 1000;
-
-        oscillators.forEach((osc, index) => {
-          const baseFreq = frequencies[index];
-          const variation = Math.sin(time * 0.5 + index) * 50;
-          osc.frequency.value = baseFreq + variation;
-
-          // Create beat pattern
-          const beatPattern = Math.sin(time * 2) * 0.5 + 0.5;
-          const complexity = Math.sin(time * 0.1 + index * 0.5) * 0.3 + 0.7;
-          gainNodes[index].gain.value = (0.001 * beatPattern * complexity) / (index + 1);
-        });
-
-        // Simulate transients and beats
-        if (Math.random() < 0.02) { // 2% chance per update
-          // Simulate a transient
-          gainNodes.forEach((gain, index) => {
-            const spike = Math.random() * 0.01;
-            gain.gain.value += spike;
-            setTimeout(() => {
-              gain.gain.value = Math.max(0, gain.gain.value - spike);
-            }, 100);
-          });
-        }
-      }
-    }, 50); // 20fps updates
-
-    // Store for cleanup
-    this.simulationInterval = updateInterval;
-    this.simulationOscillators = oscillators;
-    this.simulationGains = gainNodes;
-
-    console.log('🎵 Realistic audio simulation created with ' + frequencies.length + ' frequency bands');
+    console.log('✅ Real-time audio analyzer connected to SecStream playback');
   }
 
   public setPlayState(playState: PlayState) {
@@ -376,41 +314,13 @@ class PureAudioAnalyzer {
   private cleanup() {
     this.stopAnalysis();
 
-    // Clean up simulation
-    if (this.simulationInterval) {
-      clearInterval(this.simulationInterval);
-      this.simulationInterval = null;
-    }
-
-    if (this.simulationOscillators) {
-      this.simulationOscillators.forEach((osc: OscillatorNode) => {
-        try {
-          osc.stop();
-          osc.disconnect();
-        } catch (e) {
-          // Ignore errors from stopping already-stopped oscillators
-        }
-      });
-      this.simulationOscillators = null;
-    }
-
-    if (this.simulationGains) {
-      this.simulationGains.forEach((gain: GainNode) => {
-        try {
-          gain.disconnect();
-        } catch (e) {
-          // Ignore disconnect errors
-        }
-      });
-      this.simulationGains = null;
-    }
-
-    // For SecStream, we don't close the audio context as it's managed by SecStream
+    // Don't disconnect the analyzer if it's provided externally
+    // It will be managed by SecStreamService
     if (this.analyzer) {
-      this.analyzer.disconnect();
+      // Only nullify the reference, don't disconnect
+      this.analyzer = null;
     }
 
-    this.analyzer = null;
     this.audioContext = null;
     this.frequencyData = null;
     this.previousFrequencyData = null;

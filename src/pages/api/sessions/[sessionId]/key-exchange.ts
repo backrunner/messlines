@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
-import { sessionManager } from '../sessions.js';
+import type { ProcessorKeyExchangeRequest } from 'secstream';
+import { sessionManager } from '../../sessions';
 
 export const POST: APIRoute = async ({ params, request }) => {
   try {
@@ -11,7 +12,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       });
     }
 
-    const keyExchangeRequest = await request.json();
+    const keyExchangeRequest = await request.json() as ProcessorKeyExchangeRequest<unknown>;
 
     console.log(`🔑 Key exchange for session: ${sessionId}`);
     const response = await sessionManager.handleKeyExchange(sessionId, keyExchangeRequest);
@@ -20,7 +21,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('❌ Key exchange error:', error);
     return new Response(JSON.stringify({ error: 'Key exchange failed' }), {
       status: 500,

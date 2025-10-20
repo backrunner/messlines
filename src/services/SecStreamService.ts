@@ -9,6 +9,7 @@ export class SecStreamService {
   private player: SecureAudioPlayer | null = null;
   private transport: ArtistPageTransport | null = null;
   private currentSessionId: string | null = null;
+  private analyzerNode: AnalyserNode | null = null;
 
   constructor() {
     this.initialize();
@@ -35,14 +36,33 @@ export class SecStreamService {
     }
 
     try {
-      console.log(`🔐 Creating secure session for track: ${track.title}`);
-      this.currentSessionId = await this.transport.createSessionFromTrack(track.audioKey);
+      // Destroy old player if it exists to prevent multiple audio streams
+      if (this.player) {
+        console.log('🧹 Stopping and destroying previous player');
+        this.player.stop();
+        this.player = null;
+      }
 
+      console.log(`🔐 Creating secure session for track: ${track.title}`);
+
+      // Step 1: Create session on server (gets sessionId)
+      this.currentSessionId = await this.transport.createSessionFromTrack(track.audioKey);
+      console.log(`✅ Session created: ${this.currentSessionId}`);
+
+      // Step 2: Perform key exchange and initialize session (CRITICAL STEP!)
+      console.log('🔑 Performing key exchange and session initialization...');
+      const sessionData = await this.client.initializeSession(this.currentSessionId);
+      console.log('✅ Session initialized and key exchange completed:', sessionData);
+
+      // Step 3: Create player with the client (session is already initialized)
       this.player = new SecureAudioPlayer(this.client);
+      console.log('🎵 SecureAudioPlayer created and ready for playback');
+
+      // Step 4: Connect analyzer to the audio graph for real-time analysis
+      this.connectAnalyzer();
 
       const secureUrl = this.createSecureAudioProxy();
 
-      console.log(`✅ Secure session created: ${this.currentSessionId}`);
       return secureUrl;
     } catch (error) {
       console.error('❌ Failed to create secure audio URL:', error);
@@ -55,10 +75,53 @@ export class SecStreamService {
       throw new Error('No SecStream player available');
     }
 
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const gainNode = audioContext.createGain();
-
     return `secstream://session/${this.currentSessionId}`;
+  }
+
+  /**
+   * Connect an analyzer node to the audio graph for real-time analysis
+   * This inserts the analyzer between the player's gain node and the audio destination
+   */
+  private connectAnalyzer(): void {
+    if (!this.player || !this.client) {
+      console.warn('Cannot connect analyzer: player or client not initialized');
+      return;
+    }
+
+    try {
+      const audioContext = this.client.getAudioContext();
+
+      // Access the player's private gainNode (TypeScript private is compile-time only)
+      const playerGainNode = (this.player as any).gainNode as GainNode;
+
+      if (!playerGainNode) {
+        console.error('Could not access player gain node');
+        return;
+      }
+
+      // Create analyzer node
+      this.analyzerNode = audioContext.createAnalyser();
+      this.analyzerNode.fftSize = 2048;
+      this.analyzerNode.smoothingTimeConstant = 0.8;
+      this.analyzerNode.minDecibels = -90;
+      this.analyzerNode.maxDecibels = -10;
+
+      // Reconnect audio graph: gainNode -> analyzer -> destination
+      playerGainNode.disconnect();
+      playerGainNode.connect(this.analyzerNode);
+      this.analyzerNode.connect(audioContext.destination);
+
+      console.log('✅ Audio analyzer connected to SecStream audio graph');
+    } catch (error) {
+      console.error('❌ Failed to connect analyzer:', error);
+    }
+  }
+
+  /**
+   * Get the analyzer node for real-time audio analysis
+   */
+  getAnalyzerNode(): AnalyserNode | null {
+    return this.analyzerNode;
   }
 
   getPlayer(): SecureAudioPlayer | null {
@@ -83,10 +146,56 @@ export class SecStreamService {
       throw new Error('No SecStream player available');
     }
 
+    // Check AudioContext state BEFORE calling play
+    const audioContextBefore = this.client?.getAudioContext();
+    console.log('🔍 AudioContext state BEFORE play():', audioContextBefore?.state);
+    console.log('🔍 AudioContext:', audioContextBefore);
+
     try {
+      console.log('🎵 SecStreamService.play() - calling player.play()');
       await this.player.play();
+      console.log('✅ SecStreamService.play() - player.play() completed');
+
+      // Check if AudioContext is suspended after play attempt
+      const audioContext = this.client?.getAudioContext();
+      console.log('🔍 AudioContext state AFTER play():', audioContext?.state);
+      if (audioContext && audioContext.state === 'suspended') {
+        console.warn('⚠️ AudioContext is suspended after play attempt in SecStreamService');
+        // Dispatch suspended event manually if player didn't do it
+        if (this.player) {
+          console.log('📤 Manually dispatching suspended event');
+          this.player.dispatchEvent(new CustomEvent('suspended', {
+            detail: {
+              message: 'AudioContext blocked by browser autoplay policy',
+              state: audioContext.state,
+            },
+          }));
+        }
+      }
     } catch (error) {
-      console.error('❌ SecStream play failed:', error);
+      console.error('❌ SecStream play failed (CAUGHT):', error);
+      console.error('❌ Error type:', typeof error);
+      console.error('❌ Error instanceof Error:', error instanceof Error);
+
+      // Check if it's an autoplay policy error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ Error message:', errorMessage);
+
+      if (errorMessage.includes('AudioContext') || errorMessage.includes('not allowed')) {
+        console.warn('⚠️ Autoplay policy error detected in SecStreamService');
+        // Dispatch suspended event
+        if (this.player) {
+          console.log('📤 Dispatching suspended event from catch block');
+          this.player.dispatchEvent(new CustomEvent('suspended', {
+            detail: {
+              message: errorMessage,
+              state: this.client?.getAudioContext()?.state,
+              error,
+            },
+          }));
+        }
+      }
+
       throw error;
     }
   }

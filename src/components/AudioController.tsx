@@ -6,7 +6,6 @@ import PureAudioVisualizer from './PureAudioVisualizer';
 import UserInteractionController from './UserInteractionController';
 import PauseIndicator from './PauseIndicator';
 import PlayIndicator from './PlayIndicator';
-import PureAudioAnalyzer from './PureAudioAnalyzer';
 
 interface AudioControls {
   togglePlayPause: () => void;
@@ -22,16 +21,13 @@ const AudioController = () => {
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
   const [audioControls, setAudioControls] = useState<AudioControls | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
-  const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
+  const [audioContextSuspended, setAudioContextSuspended] = useState<boolean>(false);
 
   // Audio reactive callbacks reference - stable reference object
   const audioReactiveCallbacks = useRef({
     onTransient: (intensity: number, frequency: 'low' | 'mid' | 'high') => {},
     onBeat: (strength: number) => {},
   });
-
-  // Pure JavaScript audio analyzer instance
-  const audioAnalyzerRef = useRef<PureAudioAnalyzer | null>(null);
 
   // Handle track change
   const handleTrackChange = useCallback((track: AudioTrack, trackIndex: number) => {
@@ -42,16 +38,13 @@ const AudioController = () => {
   // Handle play state change
   const handlePlayStateChange = useCallback((state: PlayState) => {
     setPlayState(state);
-
-    // Update pure JavaScript audio analyzer play state
-    if (audioAnalyzerRef.current) {
-      audioAnalyzerRef.current.setPlayState(state);
-    }
   }, []);
 
-  // Handle autoplay blocked
-  const handleAutoplayBlocked = useCallback((blocked: boolean) => {
-    setAutoplayBlocked(blocked);
+  // Handle AudioContext suspended
+  const handleAudioContextSuspended = useCallback((suspended: boolean) => {
+    console.log('🎮 AudioController: AudioContext suspension state changed:', suspended);
+    setAudioContextSuspended(suspended);
+    console.log(`🎮 AudioController: ${suspended ? 'Showing' : 'Hiding'} PlayIndicator`);
   }, []);
 
   // Handle audio controls ready
@@ -74,45 +67,37 @@ const AudioController = () => {
     console.log('✅ SecStream audio context connected to visualizations');
   }, []);
 
-  // Cleanup audio analyzer resources
-  const cleanupAudioAnalyzer = useCallback(() => {
-    if (audioAnalyzerRef.current) {
-      audioAnalyzerRef.current.destroy();
-      audioAnalyzerRef.current = null;
-    }
-  }, []);
-
-  // Handle initial play request (handle autoplay restrictions)
+  // Handle initial play request (handle AudioContext suspension)
   const handleInitialPlay = useCallback(() => {
-    if (audioControls && (playState === PlayState.STOPPED || autoplayBlocked)) {
-      setAutoplayBlocked(false); // Reset autoplay block state after user interaction
+    if (audioControls && (playState === PlayState.STOPPED || audioContextSuspended)) {
+      setAudioContextSuspended(false); // Reset audio context suspended state
       audioControls.togglePlayPause();
     }
-  }, [audioControls, playState, autoplayBlocked]);
+  }, [audioControls, playState, audioContextSuspended]);
 
   // Calculate if animation should be paused
   const isAnimationPaused = playState === PlayState.PAUSED;
 
-  // Component cleanup
-  React.useEffect(() => {
-    return () => {
-      cleanupAudioAnalyzer();
-    };
-  }, [cleanupAudioAnalyzer]);
+  console.log('🎮 AudioController render - audioContextSuspended:', audioContextSuspended, 'playState:', playState);
 
   return (
     <>
       {/* Audio Manager - handles all audio playback logic */}
-      <AudioManager onTrackChange={handleTrackChange} onPlayStateChange={handlePlayStateChange} onControlsReady={handleControlsReady} onSecStreamReady={handleSecStreamReady} onAutoplayBlocked={handleAutoplayBlocked} />
+      <AudioManager onTrackChange={handleTrackChange} onPlayStateChange={handlePlayStateChange} onControlsReady={handleControlsReady} onSecStreamReady={handleSecStreamReady} onAudioContextSuspended={handleAudioContextSuspended} />
 
       {/* User Interaction Controller - handles keyboard and touch events */}
-      {audioControls && <UserInteractionController playState={playState} onTogglePlayPause={audioControls.togglePlayPause} onNextTrack={audioControls.nextTrack} onPrevTrack={audioControls.prevTrack} onInitialPlay={autoplayBlocked ? handleInitialPlay : undefined} />}
+      {audioControls && <UserInteractionController playState={playState} onTogglePlayPause={audioControls.togglePlayPause} onNextTrack={audioControls.nextTrack} onPrevTrack={audioControls.prevTrack} onInitialPlay={audioContextSuspended ? handleInitialPlay : undefined} />}
 
       {/* Pause Indicator - shows pause icon in top left */}
       <PauseIndicator playState={playState} />
 
-      {/* Play Indicator - shows play button in top right (only when autoplay is blocked) */}
-      {autoplayBlocked && <PlayIndicator playState={playState} onPlay={handleInitialPlay} />}
+      {/* Play Indicator - shows play button in top right when AudioContext is suspended */}
+      {audioContextSuspended && (
+        <>
+          <PlayIndicator playState={playState} onPlay={handleInitialPlay} />
+          {console.log('✅ PlayIndicator is rendered')}
+        </>
+      )}
 
       {/* Pure JavaScript Audio Visualizer - high performance, no React re-renders */}
       <PureAudioVisualizer currentTrack={currentTrack} currentTrackIndex={currentTrackIndex} playState={playState} isAnimationPaused={isAnimationPaused} audioReactiveCallbacks={audioReactiveCallbacks} />

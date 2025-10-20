@@ -9,7 +9,7 @@ interface AudioManagerProps {
   onPlayStateChange?: (state: PlayState) => void;
   onControlsReady?: (controls: AudioControls) => void;
   onSecStreamReady?: (audioContext: AudioContext) => void;
-  onAutoplayBlocked?: (blocked: boolean) => void;
+  onAudioContextSuspended?: (suspended: boolean) => void;
 }
 
 interface AudioControls {
@@ -29,7 +29,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return shuffled;
 };
 
-const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSecStreamReady, onAutoplayBlocked }: AudioManagerProps) => {
+const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSecStreamReady, onAudioContextSuspended }: AudioManagerProps) => {
   const secStreamRef = useRef<SecStreamService | null>(null);
   const audioAnalyzerRef = useRef<PureAudioAnalyzer | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
@@ -125,6 +125,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       if (!track || !secStreamRef.current) return;
 
       try {
+        // Stop any currently playing audio first
+        if (secStreamRef.current) {
+          secStreamRef.current.stop();
+        }
+
         setPlayState(PlayState.LOADING);
 
         console.log(`🔐 Playing with SecStream: ${track.title}`);
@@ -137,7 +142,30 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         const audioContext = secStreamRef.current.getAudioContext();
         if (audioContext && audioAnalyzerRef.current) {
           audioAnalyzerRef.current.setSecStreamAudioContext(audioContext);
+
+          // Get the analyzer node from SecStreamService and connect it
+          const analyzerNode = secStreamRef.current.getAnalyzerNode();
+          if (analyzerNode) {
+            audioAnalyzerRef.current.setAnalyzerNode(analyzerNode);
+            console.log('✅ Analyzer connected to real-time SecStream audio');
+          }
+
           onSecStreamReady?.(audioContext);
+
+          // Monitor AudioContext state changes
+          const handleAudioContextStateChange = () => {
+            console.log(`AudioContext state changed to: ${audioContext.state}`);
+            if (audioContext.state === 'suspended') {
+              console.log('⚠️ AudioContext is suspended, user interaction required');
+              // Notify parent component to show PlayIndicator
+              onAudioContextSuspended?.(true);
+            } else if (audioContext.state === 'running') {
+              // Clear PlayIndicator when AudioContext is running
+              onAudioContextSuspended?.(false);
+            }
+          };
+
+          audioContext.addEventListener('statechange', handleAudioContextStateChange);
         }
 
         const handleSecStreamEnded = () => {
@@ -155,15 +183,72 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
           console.log('Current time:', customEvent.detail?.currentTime);
         };
 
+        const handleSecStreamSuspended = (event: Event) => {
+          console.warn('🔴 SecStream suspended event received:', event);
+          const customEvent = event as CustomEvent;
+          console.log('🔴 Event detail:', customEvent.detail);
+          const audioContext = secStreamRef.current?.getAudioContext();
+          console.log('🔴 AudioContext state on suspended event:', audioContext?.state);
+          if (audioContext && audioContext.state === 'suspended') {
+            console.log('⚠️ AudioContext is suspended, showing PlayIndicator for user interaction');
+            setPlayState(PlayState.STOPPED);
+            onPlayStateChange?.(PlayState.STOPPED);
+            onAudioContextSuspended?.(true);
+          }
+        };
+
         const player = secStreamRef.current.getPlayer();
+        console.log('🎮 Attaching event listeners to player:', !!player);
+        console.log('🎮 Player is EventTarget:', player instanceof EventTarget);
         if (player) {
+          // Test that event listener attachment works
+          const testHandler = () => console.log('🧪 Test event received');
+          player.addEventListener('test', testHandler);
+          player.dispatchEvent(new CustomEvent('test'));
+          player.removeEventListener('test', testHandler);
+
+          // Add a catch-all event listener to see ALL events
+          const allEventsHandler = (event: Event) => {
+            console.log('📢 Event dispatched on player:', event.type, event);
+          };
+          player.addEventListener('suspended', allEventsHandler);
+          player.addEventListener('error', allEventsHandler);
+          player.addEventListener('ended', allEventsHandler);
+
           player.addEventListener('ended', handleSecStreamEnded);
           player.addEventListener('error', handleSecStreamError);
           player.addEventListener('timeupdate', handleSecStreamTimeUpdate);
+          player.addEventListener('suspended', handleSecStreamSuspended);
+          console.log('✅ Event listeners attached, including suspended handler');
+
+          // Verify the listener is attached by checking the player's internal state
+          console.log('🔍 Verifying suspended listener is attached...');
         }
 
-        await secStreamRef.current.play();
+        console.log('🎵 About to call secStreamRef.current.play()');
+        try {
+          await secStreamRef.current.play();
+          console.log('✅ Play() call completed in AudioManager');
+        } catch (playError) {
+          console.error('❌ Play() threw error in AudioManager:', playError);
+          throw playError; // Re-throw to outer catch
+        }
 
+        // Check if AudioContext is still suspended after play attempt
+        const playAudioContext = secStreamRef.current.getAudioContext();
+        console.log('🔍 Checking AudioContext state after play:', playAudioContext?.state);
+        if (playAudioContext && playAudioContext.state === 'suspended') {
+          console.log('🔴 AudioContext suspended after play attempt - autoplay blocked');
+          setPlayState(PlayState.STOPPED);
+          onPlayStateChange?.(PlayState.STOPPED);
+          onAudioContextSuspended?.(true);
+          if (throwOnError) {
+            throw new Error('AudioContext blocked by browser autoplay policy');
+          }
+          return;
+        }
+
+        console.log('✅ Playback started successfully, setting state to PLAYING');
         setPlayState(PlayState.PLAYING);
         setCurrentTrackIndex(trackIndex);
 
@@ -172,6 +257,15 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
       } catch (error) {
         console.error('SecStream playback failed:', error);
+
+        // Check if it's an autoplay policy error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('AudioContext') || errorMessage.includes('user gesture')) {
+          console.log('⚠️ Autoplay blocked by browser policy');
+          setPlayState(PlayState.STOPPED);
+          onPlayStateChange?.(PlayState.STOPPED);
+          onAudioContextSuspended?.(true);
+        }
 
         if (throwOnError) {
           setPlayState(PlayState.STOPPED);
@@ -183,7 +277,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         }
       }
     },
-    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, playNext]
+    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, onAudioContextSuspended, playNext]
   );
 
   const stop = useCallback(() => {
@@ -194,15 +288,42 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     }
   }, [onPlayStateChange]);
 
+  // Track the last played index to prevent re-playing the same track
+  const lastPlayedIndexRef = useRef<number>(-1);
+
   // Auto-play track when currentTrackIndex changes
   useEffect(() => {
-    if (shuffledPlaylist.length > 0 && (playState === PlayState.PLAYING || playState === PlayState.LOADING)) {
+    if (shuffledPlaylist.length > 0 &&
+        (playState === PlayState.PLAYING || playState === PlayState.LOADING) &&
+        currentTrackIndex !== lastPlayedIndexRef.current) {
+      lastPlayedIndexRef.current = currentTrackIndex;
       playTrack(currentTrackIndex);
     }
-  }, [currentTrackIndex, shuffledPlaylist, playState, playTrack]);
+  }, [currentTrackIndex, shuffledPlaylist.length, playState]);
 
   const togglePlayPause = useCallback(() => {
     if (!secStreamRef.current) return;
+
+    // Check if AudioContext is suspended and resume it with user interaction
+    const audioContext = secStreamRef.current.getAudioContext();
+    if (audioContext && audioContext.state === 'suspended') {
+      console.log('🎵 Resuming suspended AudioContext with user interaction');
+      audioContext.resume()
+        .then(() => {
+          console.log('✅ AudioContext resumed successfully');
+          onAudioContextSuspended?.(false);
+          // Continue with normal playback logic
+          if (playState === PlayState.PAUSED || playState === PlayState.STOPPED || playState === PlayState.ERROR) {
+            secStreamRef.current?.play();
+            setPlayState(PlayState.PLAYING);
+            onPlayStateChange?.(PlayState.PLAYING);
+          }
+        })
+        .catch((err) => {
+          console.error('❌ Failed to resume AudioContext:', err);
+        });
+      return;
+    }
 
     if (playState === PlayState.PLAYING) {
       secStreamRef.current.pause();
@@ -215,25 +336,28 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     } else if (playState === PlayState.STOPPED || playState === PlayState.ERROR) {
       playTrack(currentTrackIndex);
     }
-  }, [playState, onPlayStateChange, playTrack, currentTrackIndex]);
+  }, [playState, onPlayStateChange, playTrack, currentTrackIndex, onAudioContextSuspended]);
 
   useEffect(() => {
     if (AUDIO_CONFIG.autoPlay && shuffledPlaylist.length > 0 && !isInitializedRef.current && playState === PlayState.STOPPED) {
       isInitializedRef.current = true;
+      lastPlayedIndexRef.current = 0; // Mark track 0 as being played to prevent duplicate
 
       setTimeout(async () => {
         try {
           await playTrack(0, true);
-          onAutoplayBlocked?.(false);
+          console.log('✅ Autoplay started successfully');
         } catch (error) {
-          console.log('Autoplay blocked by browser, user interaction required:', error);
-          onAutoplayBlocked?.(true);
+          console.log('⚠️ Autoplay blocked by browser (expected behavior):', error);
+          // AudioContext suspension will be detected and onAudioContextSuspended will be called
+          // The PlayIndicator will be shown to prompt user interaction
           setPlayState(PlayState.STOPPED);
           onPlayStateChange?.(PlayState.STOPPED);
+          // Don't rethrow - this is expected behavior for autoplay
         }
       }, 3000);
     }
-  }, [shuffledPlaylist, playState, playTrack, onAutoplayBlocked, onPlayStateChange]);
+  }, [shuffledPlaylist, playState, playTrack, onPlayStateChange]);
 
   const controls = useMemo<AudioControls>(
     () => ({
