@@ -5,8 +5,17 @@ import { SECSTREAM_CONFIG } from '../constants/playlist';
 export function createSessionManager(): SessionManager {
 
   return new SessionManager({
+    // Basic slicing configuration
     sliceDurationMs: SECSTREAM_CONFIG.sliceDurationMs,
     compressionLevel: SECSTREAM_CONFIG.compressionLevel,
+
+    // Streaming optimization - prewarm slices during key exchange for instant playback
+    prewarmSlices: SECSTREAM_CONFIG.prewarmSlices,
+    prewarmConcurrency: SECSTREAM_CONFIG.prewarmConcurrency,
+
+    // Server-side caching for performance
+    serverCacheSize: SECSTREAM_CONFIG.serverCacheSize,
+    serverCacheTtlMs: SECSTREAM_CONFIG.serverCacheTtlMs,
   });
 }
 

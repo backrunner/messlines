@@ -9,5 +9,15 @@ import cloudflare from '@astrojs/cloudflare';
 export default defineConfig({
   integrations: [react()],
   adapter: cloudflare(),
-  output: 'server'
+  output: 'server',
+  vite: {
+    // Configure Vite to properly handle Web Workers
+    worker: {
+      format: 'es', // Use ES modules for workers
+    },
+    optimizeDeps: {
+      // Exclude secstream from pre-bundling to preserve worker imports
+      exclude: ['secstream'],
+    },
+  },
 });

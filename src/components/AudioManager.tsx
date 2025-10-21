@@ -37,6 +37,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   const [shuffledPlaylist, setShuffledPlaylist] = useState<AudioTrack[]>([]);
   const [volume, setVolume] = useState<number>(AUDIO_CONFIG.volume);
   const isInitializedRef = useRef(false);
+  const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Audio reactive callbacks reference
   const audioReactiveCallbacks = useRef({
@@ -59,6 +60,12 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     });
 
     return () => {
+      // Clean up fade interval
+      if (fadeIntervalRef.current) {
+        clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
+
       if (secStreamRef.current) {
         secStreamRef.current.destroy();
         secStreamRef.current = null;
@@ -94,16 +101,22 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
     if (nextIndex >= shuffledPlaylist.length) {
       if (AUDIO_CONFIG.loop) {
-        const newShuffled = shuffleArray(AUDIO_PLAYLIST);
+        // Loop enabled: reshuffle playlist and restart from beginning
+        const newShuffled = AUDIO_CONFIG.shufflePlay ? shuffleArray(AUDIO_PLAYLIST) : AUDIO_PLAYLIST;
         setShuffledPlaylist(newShuffled);
         nextIndex = 0;
+        console.log('🔁 Playlist ended, looping and reshuffling...');
       } else {
+        // No loop: stop playback and fade out background effects
+        console.log('🛑 Playlist ended, stopping playback...');
         setPlayState(PlayState.STOPPED);
         onPlayStateChange?.(PlayState.STOPPED);
         return;
       }
     }
 
+    // Smooth transition to next track
+    console.log(`⏭️ Transitioning to next track: ${nextIndex}`);
     setCurrentTrackIndex(nextIndex);
   }, [shuffledPlaylist, currentTrackIndex, onPlayStateChange]);
 
@@ -169,7 +182,41 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         }
 
         const handleSecStreamEnded = () => {
-          playNext();
+          console.log('🏁 Track ended, transitioning to next...');
+
+          // Clear any existing fade interval
+          if (fadeIntervalRef.current) {
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+          }
+
+          // Apply fade-out effect before transitioning
+          if (secStreamRef.current && AUDIO_CONFIG.fadeOutDuration > 0) {
+            const currentVol = volume;
+            const fadeSteps = 20;
+            const fadeInterval = AUDIO_CONFIG.fadeOutDuration / fadeSteps;
+            let step = 0;
+
+            fadeIntervalRef.current = setInterval(() => {
+              step++;
+              const newVolume = currentVol * (1 - step / fadeSteps);
+              secStreamRef.current?.setVolume(newVolume);
+
+              if (step >= fadeSteps) {
+                if (fadeIntervalRef.current) {
+                  clearInterval(fadeIntervalRef.current);
+                  fadeIntervalRef.current = null;
+                }
+                // Reset volume for next track
+                secStreamRef.current?.setVolume(currentVol);
+                // Transition to next track
+                playNext();
+              }
+            }, fadeInterval);
+          } else {
+            // No fade-out, immediate transition
+            playNext();
+          }
         };
 
         const handleSecStreamError = (event: Event) => {
@@ -229,6 +276,36 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         try {
           await secStreamRef.current.play();
           console.log('✅ Play() call completed in AudioManager');
+
+          // Clear any existing fade interval
+          if (fadeIntervalRef.current) {
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+          }
+
+          // Apply fade-in effect after starting playback
+          if (AUDIO_CONFIG.fadeInDuration > 0) {
+            secStreamRef.current.setVolume(0); // Start from zero
+            const fadeSteps = 20;
+            const fadeInterval = AUDIO_CONFIG.fadeInDuration / fadeSteps;
+            let step = 0;
+
+            fadeIntervalRef.current = setInterval(() => {
+              step++;
+              const newVolume = volume * (step / fadeSteps);
+              secStreamRef.current?.setVolume(newVolume);
+
+              if (step >= fadeSteps) {
+                if (fadeIntervalRef.current) {
+                  clearInterval(fadeIntervalRef.current);
+                  fadeIntervalRef.current = null;
+                }
+                secStreamRef.current?.setVolume(volume); // Ensure final volume is set
+              }
+            }, fadeInterval);
+          } else {
+            secStreamRef.current.setVolume(volume);
+          }
         } catch (playError) {
           console.error('❌ Play() threw error in AudioManager:', playError);
           throw playError; // Re-throw to outer catch
@@ -281,6 +358,12 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   );
 
   const stop = useCallback(() => {
+    // Clear any ongoing fade effects
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+
     if (secStreamRef.current) {
       secStreamRef.current.stop();
       setPlayState(PlayState.STOPPED);

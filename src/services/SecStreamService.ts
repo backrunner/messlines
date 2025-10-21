@@ -1,8 +1,24 @@
-import { SecureAudioClient } from 'secstream/client';
-import { SecureAudioPlayer } from 'secstream/client';
+import {
+  SecureAudioClient,
+  SecureAudioPlayer,
+  AggressiveBufferStrategy,
+  LinearPrefetchStrategy
+} from 'secstream/client';
 import { ArtistPageTransport } from '../transport/ArtistPageTransport';
 import { SECSTREAM_CONFIG } from '../constants/playlist';
 import type { AudioTrack } from '../constants/playlist';
+
+interface SuspendedEventDetail {
+  message: string;
+  state?: AudioContextState;
+  error?: unknown;
+}
+
+// Internal interface to access SecureAudioPlayer's private gainNode
+// This is necessary for connecting the analyzer to the audio graph
+interface SecureAudioPlayerInternal {
+  gainNode: GainNode;
+}
 
 export class SecStreamService {
   private client: SecureAudioClient | null = null;
@@ -15,17 +31,31 @@ export class SecStreamService {
     this.initialize();
   }
 
-  private initialize() {
+  private initialize(): void {
     try {
       this.transport = new ArtistPageTransport(window.location.origin);
 
+      // Get worker URL using Vite's worker import pattern
+      let workerUrl: string | undefined;
+      if (SECSTREAM_CONFIG.workerConfig?.enabled) {
+        try {
+          workerUrl = new URL('secstream/client/worker', import.meta.url).href;
+          console.log('🔧 Worker URL:', workerUrl);
+        } catch (error) {
+          console.warn('⚠️ Failed to load worker URL:', error);
+        }
+      }
+
       this.client = new SecureAudioClient(this.transport, {
-        bufferSize: SECSTREAM_CONFIG.bufferSize,
-        prefetchSize: SECSTREAM_CONFIG.prefetchSize,
+        workerConfig: SECSTREAM_CONFIG.workerConfig,
+        workerUrl: workerUrl,
       });
 
-      console.log('✅ SecStream service initialized');
-    } catch (error) {
+      console.log('✅ SecStream initialized:', {
+        workerEnabled: SECSTREAM_CONFIG.workerConfig?.enabled,
+        workerCount: SECSTREAM_CONFIG.workerConfig?.workerCount,
+      });
+    } catch (error: unknown) {
       console.error('❌ Failed to initialize SecStream service:', error);
     }
   }
@@ -55,7 +85,10 @@ export class SecStreamService {
       console.log('✅ Session initialized and key exchange completed:', sessionData);
 
       // Step 3: Create player with the client (session is already initialized)
-      this.player = new SecureAudioPlayer(this.client);
+      this.player = new SecureAudioPlayer(this.client, {
+        bufferStrategy: new AggressiveBufferStrategy(),
+        prefetchStrategy: new LinearPrefetchStrategy(),
+      });
       console.log('🎵 SecureAudioPlayer created and ready for playback');
 
       // Step 4: Connect analyzer to the audio graph for real-time analysis
@@ -64,7 +97,7 @@ export class SecStreamService {
       const secureUrl = this.createSecureAudioProxy();
 
       return secureUrl;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ Failed to create secure audio URL:', error);
       throw error;
     }
@@ -92,7 +125,7 @@ export class SecStreamService {
       const audioContext = this.client.getAudioContext();
 
       // Access the player's private gainNode (TypeScript private is compile-time only)
-      const playerGainNode = (this.player as any).gainNode as GainNode;
+      const playerGainNode = (this.player as unknown as SecureAudioPlayerInternal).gainNode;
 
       if (!playerGainNode) {
         console.error('Could not access player gain node');
@@ -112,7 +145,7 @@ export class SecStreamService {
       this.analyzerNode.connect(audioContext.destination);
 
       console.log('✅ Audio analyzer connected to SecStream audio graph');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ Failed to connect analyzer:', error);
     }
   }
@@ -164,15 +197,14 @@ export class SecStreamService {
         // Dispatch suspended event manually if player didn't do it
         if (this.player) {
           console.log('📤 Manually dispatching suspended event');
-          this.player.dispatchEvent(new CustomEvent('suspended', {
-            detail: {
-              message: 'AudioContext blocked by browser autoplay policy',
-              state: audioContext.state,
-            },
-          }));
+          const detail: SuspendedEventDetail = {
+            message: 'AudioContext blocked by browser autoplay policy',
+            state: audioContext.state,
+          };
+          this.player.dispatchEvent(new CustomEvent('suspended', { detail }));
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ SecStream play failed (CAUGHT):', error);
       console.error('❌ Error type:', typeof error);
       console.error('❌ Error instanceof Error:', error instanceof Error);
@@ -186,13 +218,12 @@ export class SecStreamService {
         // Dispatch suspended event
         if (this.player) {
           console.log('📤 Dispatching suspended event from catch block');
-          this.player.dispatchEvent(new CustomEvent('suspended', {
-            detail: {
-              message: errorMessage,
-              state: this.client?.getAudioContext()?.state,
-              error,
-            },
-          }));
+          const detail: SuspendedEventDetail = {
+            message: errorMessage,
+            state: this.client?.getAudioContext()?.state,
+            error,
+          };
+          this.player.dispatchEvent(new CustomEvent('suspended', { detail }));
         }
       }
 
@@ -225,7 +256,7 @@ export class SecStreamService {
 
     try {
       await this.player.seekToTime(time);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ SecStream seek failed:', error);
       throw error;
     }
