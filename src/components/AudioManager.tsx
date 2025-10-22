@@ -39,6 +39,8 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   const isInitializedRef = useRef(false);
   const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const trackDirectionRef = useRef<'next' | 'prev' | 'none'>('none');
+  const pauseFadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const currentVolumeRef = useRef<number>(AUDIO_CONFIG.volume);
 
   // Audio reactive callbacks reference
   const audioReactiveCallbacks = useRef({
@@ -145,6 +147,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       if (fadeIntervalRef.current) {
         clearInterval(fadeIntervalRef.current);
         fadeIntervalRef.current = null;
+      }
+      // Clean up pause fade interval
+      if (pauseFadeIntervalRef.current) {
+        clearInterval(pauseFadeIntervalRef.current);
+        pauseFadeIntervalRef.current = null;
       }
 
       if (secStreamRef.current) {
@@ -325,6 +332,10 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       clearInterval(fadeIntervalRef.current);
       fadeIntervalRef.current = null;
     }
+    if (pauseFadeIntervalRef.current) {
+      clearInterval(pauseFadeIntervalRef.current);
+      pauseFadeIntervalRef.current = null;
+    }
 
     if (secStreamRef.current) {
       secStreamRef.current.stop();
@@ -332,6 +343,92 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       onPlayStateChange?.(PlayState.STOPPED);
     }
   }, [onPlayStateChange]);
+
+  // Fade out volume smoothly, then execute callback
+  const fadeOutVolume = useCallback((callback: () => void, duration: number = 300) => {
+    if (!secStreamRef.current) {
+      callback();
+      return;
+    }
+
+    // Clear any existing pause fade
+    if (pauseFadeIntervalRef.current) {
+      clearInterval(pauseFadeIntervalRef.current);
+      pauseFadeIntervalRef.current = null;
+    }
+
+    const fadeSteps = 15;
+    const fadeInterval = duration / fadeSteps;
+    const startVolume = currentVolumeRef.current;
+    let step = 0;
+
+    pauseFadeIntervalRef.current = setInterval(() => {
+      step++;
+      const newVolume = startVolume * (1 - step / fadeSteps);
+      secStreamRef.current?.setVolume(Math.max(0, newVolume));
+
+      if (step >= fadeSteps) {
+        if (pauseFadeIntervalRef.current) {
+          clearInterval(pauseFadeIntervalRef.current);
+          pauseFadeIntervalRef.current = null;
+        }
+        secStreamRef.current?.setVolume(0);
+        callback();
+      }
+    }, fadeInterval);
+  }, []);
+
+  // Fade in volume smoothly
+  const fadeInVolume = useCallback((targetVolume: number, duration: number = 300) => {
+    if (!secStreamRef.current) return;
+
+    // Clear any existing pause fade
+    if (pauseFadeIntervalRef.current) {
+      clearInterval(pauseFadeIntervalRef.current);
+      pauseFadeIntervalRef.current = null;
+    }
+
+    const fadeSteps = 15;
+    const fadeInterval = duration / fadeSteps;
+    let step = 0;
+
+    secStreamRef.current.setVolume(0);
+
+    pauseFadeIntervalRef.current = setInterval(() => {
+      step++;
+      const newVolume = targetVolume * (step / fadeSteps);
+      secStreamRef.current?.setVolume(Math.min(targetVolume, newVolume));
+
+      if (step >= fadeSteps) {
+        if (pauseFadeIntervalRef.current) {
+          clearInterval(pauseFadeIntervalRef.current);
+          pauseFadeIntervalRef.current = null;
+        }
+        secStreamRef.current?.setVolume(targetVolume);
+      }
+    }, fadeInterval);
+  }, []);
+
+  // Pause with fade out
+  const pauseWithFade = useCallback(() => {
+    if (!secStreamRef.current) return;
+
+    fadeOutVolume(() => {
+      secStreamRef.current?.pause();
+      setPlayState(PlayState.PAUSED);
+      onPlayStateChange?.(PlayState.PAUSED);
+    });
+  }, [fadeOutVolume, onPlayStateChange]);
+
+  // Resume with fade in
+  const resumeWithFade = useCallback(() => {
+    if (!secStreamRef.current) return;
+
+    secStreamRef.current.play();
+    setPlayState(PlayState.PLAYING);
+    onPlayStateChange?.(PlayState.PLAYING);
+    fadeInVolume(currentVolumeRef.current);
+  }, [fadeInVolume, onPlayStateChange]);
 
   // Track the last played index to prevent re-playing the same track
   const lastPlayedIndexRef = useRef<number>(-1);
@@ -359,9 +456,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
           onAudioContextSuspended?.(false);
           // Continue with normal playback logic
           if (playState === PlayState.PAUSED || playState === PlayState.STOPPED || playState === PlayState.ERROR) {
-            secStreamRef.current?.play();
-            setPlayState(PlayState.PLAYING);
-            onPlayStateChange?.(PlayState.PLAYING);
+            resumeWithFade();
           }
         })
         .catch((err) => {
@@ -371,17 +466,13 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     }
 
     if (playState === PlayState.PLAYING) {
-      secStreamRef.current.pause();
-      setPlayState(PlayState.PAUSED);
-      onPlayStateChange?.(PlayState.PAUSED);
+      pauseWithFade();
     } else if (playState === PlayState.PAUSED) {
-      secStreamRef.current.play();
-      setPlayState(PlayState.PLAYING);
-      onPlayStateChange?.(PlayState.PLAYING);
+      resumeWithFade();
     } else if (playState === PlayState.STOPPED || playState === PlayState.ERROR) {
       playTrack(currentTrackIndex);
     }
-  }, [playState, onPlayStateChange, playTrack, currentTrackIndex, onAudioContextSuspended]);
+  }, [playState, onPlayStateChange, playTrack, currentTrackIndex, onAudioContextSuspended, pauseWithFade, resumeWithFade]);
 
   useEffect(() => {
     if (AUDIO_CONFIG.autoPlay && shuffledPlaylist.length > 0 && !isInitializedRef.current && playState === PlayState.STOPPED) {
@@ -425,6 +516,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       audioAnalyzerRef.current.setPlayState(playState);
     }
   }, [playState]);
+
+  // Keep currentVolumeRef in sync with volume state
+  useEffect(() => {
+    currentVolumeRef.current = volume;
+  }, [volume]);
 
   // Expose SecStream audio reactive callbacks globally for visualizations
   useEffect(() => {
