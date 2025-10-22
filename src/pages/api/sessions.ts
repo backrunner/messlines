@@ -10,9 +10,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     console.log('📥 Received session creation request');
 
-    const { audioKey } = await request.json() as { audioKey: string };
+    const body = await request.json() as { audioKey?: string; audioKeys?: string[] };
+    const { audioKey, audioKeys } = body;
 
-    if (!audioKey) {
+    // Support both single track (audioKey) and multi-track (audioKeys) sessions
+    if (!audioKey && (!audioKeys || audioKeys.length === 0)) {
       console.error('❌ No audio key provided in request');
       return new Response(JSON.stringify({ error: 'Audio key is required' }), {
         status: 400,
@@ -30,9 +32,46 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    // Get audio file from R2 bucket
+    // Handle multi-track session creation
+    if (audioKeys && audioKeys.length > 0) {
+      console.log(`📦 Creating multi-track session with ${audioKeys.length} tracks`);
+
+      // Load all audio files and prepare track objects
+      const tracks = [];
+      for (let i = 0; i < audioKeys.length; i++) {
+        const key = audioKeys[i];
+        console.log(`📦 Retrieving audio file: ${key}`);
+        const buffer = await audioHandler.getAudioFromBucket(key, bucket);
+        tracks.push({
+          audioData: buffer,
+          metadata: {
+            title: `Track ${i + 1}`, // You can extract from audioKey if needed
+          }
+        });
+      }
+
+      // Create multi-track session
+      console.log('🏗️ Creating multi-track session with SessionManager...');
+      const sessionId = await sessionManager.createMultiTrackSession(tracks);
+      console.log('✅ Multi-track session created successfully:', sessionId);
+
+      const response = {
+        sessionId,
+        audioKeys,
+        trackCount: audioKeys.length,
+        message: 'Multi-track session created successfully',
+      };
+
+      console.log('📤 Sending successful response:', response);
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Handle single track session creation (legacy)
     console.log(`📦 Retrieving audio file: ${audioKey}`);
-    const audioBuffer = await audioHandler.getAudioFromBucket(audioKey, bucket);
+    const audioBuffer = await audioHandler.getAudioFromBucket(audioKey!, bucket);
 
     console.log('📊 Audio buffer size:', audioBuffer.byteLength);
 

@@ -18,9 +18,10 @@
     "astro": "^5.14.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "secstream": "file:../../audio-secure-transfer"
+    "secstream": "file:..\\..\\audio-secure-transfer"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251011.0"
+    "@cloudflare/workers-types": "^4.20251011.0",
+    "wrangler": "^4.44.0"
   }
 }

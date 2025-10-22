@@ -45,19 +45,99 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     onBeat: (strength: number) => {},
   });
 
-  // Initialize SecStream audio analyzer on component mount
+  // Initialize SecStream audio analyzer and playlist on component mount
   useEffect(() => {
-    secStreamRef.current = new SecStreamService();
+    const initializeSecStream = async () => {
+      try {
+        secStreamRef.current = new SecStreamService();
+        console.log('✅ SecStreamService instance created');
+      } catch (error) {
+        console.error('❌ Failed to create SecStreamService:', error);
+        return;
+      }
 
-    // Initialize audio analyzer for SecStream only
-    audioAnalyzerRef.current = new PureAudioAnalyzer({
-      onTransientDetected: (intensity: number, frequency: 'low' | 'mid' | 'high') => {
-        audioReactiveCallbacks.current.onTransient(intensity, frequency);
-      },
-      onBeatDetected: (strength: number) => {
-        audioReactiveCallbacks.current.onBeat(strength);
-      },
-    });
+      // Initialize multi-track session with the entire playlist
+      try {
+        await secStreamRef.current.initializePlaylist(shuffledPlaylist.length > 0 ? shuffledPlaylist : AUDIO_PLAYLIST);
+        console.log('✅ Multi-track playlist initialized');
+
+        // Initialize audio analyzer for SecStream only
+        audioAnalyzerRef.current = new PureAudioAnalyzer({
+          onTransientDetected: (intensity: number, frequency: 'low' | 'mid' | 'high') => {
+            audioReactiveCallbacks.current.onTransient(intensity, frequency);
+          },
+          onBeatDetected: (strength: number) => {
+            audioReactiveCallbacks.current.onBeat(strength);
+          },
+        });
+
+        // Connect audio analysis to SecStream's audio context
+        const audioContext = secStreamRef.current.getAudioContext();
+        if (audioContext && audioAnalyzerRef.current) {
+          audioAnalyzerRef.current.setSecStreamAudioContext(audioContext);
+
+          // Get the analyzer node from SecStreamService and connect it
+          const analyzerNode = secStreamRef.current.getAnalyzerNode();
+          if (analyzerNode) {
+            audioAnalyzerRef.current.setAnalyzerNode(analyzerNode);
+            console.log('✅ Analyzer connected to real-time SecStream audio');
+          }
+
+          onSecStreamReady?.(audioContext);
+
+          // Monitor AudioContext state changes
+          const handleAudioContextStateChange = () => {
+            console.log(`AudioContext state changed to: ${audioContext.state}`);
+            if (audioContext.state === 'suspended') {
+              console.log('⚠️ AudioContext is suspended, user interaction required');
+              onAudioContextSuspended?.(true);
+            } else if (audioContext.state === 'running') {
+              onAudioContextSuspended?.(false);
+            }
+          };
+
+          audioContext.addEventListener('statechange', handleAudioContextStateChange);
+        }
+
+        // Set up event listeners on the player
+        const player = secStreamRef.current.getPlayer();
+        if (player) {
+          const handleSecStreamEnded = () => {
+            console.log('🏁 Track ended, transitioning to next...');
+            playNext();
+          };
+
+          const handleSecStreamError = (event: Event) => {
+            console.error('SecStream playback error:', event);
+            setPlayState(PlayState.ERROR);
+            onPlayStateChange?.(PlayState.ERROR);
+          };
+
+          const handleSecStreamSuspended = (event: Event) => {
+            console.warn('🔴 SecStream suspended event received:', event);
+            const customEvent = event as CustomEvent;
+            console.log('🔴 Event detail:', customEvent.detail);
+            const audioContext = secStreamRef.current?.getAudioContext();
+            console.log('🔴 AudioContext state on suspended event:', audioContext?.state);
+            if (audioContext && audioContext.state === 'suspended') {
+              console.log('⚠️ AudioContext is suspended, showing PlayIndicator for user interaction');
+              setPlayState(PlayState.STOPPED);
+              onPlayStateChange?.(PlayState.STOPPED);
+              onAudioContextSuspended?.(true);
+            }
+          };
+
+          player.addEventListener('ended', handleSecStreamEnded);
+          player.addEventListener('error', handleSecStreamError);
+          player.addEventListener('suspended', handleSecStreamSuspended);
+          console.log('✅ Event listeners attached to player');
+        }
+      } catch (error) {
+        console.error('❌ Failed to initialize SecStream playlist:', error);
+      }
+    };
+
+    initializeSecStream();
 
     return () => {
       // Clean up fade interval
@@ -75,7 +155,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         audioAnalyzerRef.current = null;
       }
     };
-  }, []);
+  }, [shuffledPlaylist]);
 
   useEffect(() => {
     if (AUDIO_PLAYLIST.length === 0) return;
@@ -138,139 +218,14 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       if (!track || !secStreamRef.current) return;
 
       try {
-        // Stop any currently playing audio first
-        if (secStreamRef.current) {
-          secStreamRef.current.stop();
-        }
-
         setPlayState(PlayState.LOADING);
 
-        console.log(`🔐 Playing with SecStream: ${track.title}`);
+        console.log(`🔐 Switching to track: ${track.title}`);
 
-        await secStreamRef.current.createSecureAudioUrl(track);
+        // Switch to the track in the multi-track session
+        await secStreamRef.current.switchToTrack(trackIndex, false);
 
         secStreamRef.current.setVolume(volume);
-
-        // Connect audio analysis to SecStream's audio context
-        const audioContext = secStreamRef.current.getAudioContext();
-        if (audioContext && audioAnalyzerRef.current) {
-          audioAnalyzerRef.current.setSecStreamAudioContext(audioContext);
-
-          // Get the analyzer node from SecStreamService and connect it
-          const analyzerNode = secStreamRef.current.getAnalyzerNode();
-          if (analyzerNode) {
-            audioAnalyzerRef.current.setAnalyzerNode(analyzerNode);
-            console.log('✅ Analyzer connected to real-time SecStream audio');
-          }
-
-          onSecStreamReady?.(audioContext);
-
-          // Monitor AudioContext state changes
-          const handleAudioContextStateChange = () => {
-            console.log(`AudioContext state changed to: ${audioContext.state}`);
-            if (audioContext.state === 'suspended') {
-              console.log('⚠️ AudioContext is suspended, user interaction required');
-              // Notify parent component to show PlayIndicator
-              onAudioContextSuspended?.(true);
-            } else if (audioContext.state === 'running') {
-              // Clear PlayIndicator when AudioContext is running
-              onAudioContextSuspended?.(false);
-            }
-          };
-
-          audioContext.addEventListener('statechange', handleAudioContextStateChange);
-        }
-
-        const handleSecStreamEnded = () => {
-          console.log('🏁 Track ended, transitioning to next...');
-
-          // Clear any existing fade interval
-          if (fadeIntervalRef.current) {
-            clearInterval(fadeIntervalRef.current);
-            fadeIntervalRef.current = null;
-          }
-
-          // Apply fade-out effect before transitioning
-          if (secStreamRef.current && AUDIO_CONFIG.fadeOutDuration > 0) {
-            const currentVol = volume;
-            const fadeSteps = 20;
-            const fadeInterval = AUDIO_CONFIG.fadeOutDuration / fadeSteps;
-            let step = 0;
-
-            fadeIntervalRef.current = setInterval(() => {
-              step++;
-              const newVolume = currentVol * (1 - step / fadeSteps);
-              secStreamRef.current?.setVolume(newVolume);
-
-              if (step >= fadeSteps) {
-                if (fadeIntervalRef.current) {
-                  clearInterval(fadeIntervalRef.current);
-                  fadeIntervalRef.current = null;
-                }
-                // Reset volume for next track
-                secStreamRef.current?.setVolume(currentVol);
-                // Transition to next track
-                playNext();
-              }
-            }, fadeInterval);
-          } else {
-            // No fade-out, immediate transition
-            playNext();
-          }
-        };
-
-        const handleSecStreamError = (event: Event) => {
-          console.error('SecStream playback error:', event);
-          setPlayState(PlayState.ERROR);
-          onPlayStateChange?.(PlayState.ERROR);
-        };
-
-        const handleSecStreamTimeUpdate = (event: Event) => {
-          const customEvent = event as CustomEvent;
-          console.log('Current time:', customEvent.detail?.currentTime);
-        };
-
-        const handleSecStreamSuspended = (event: Event) => {
-          console.warn('🔴 SecStream suspended event received:', event);
-          const customEvent = event as CustomEvent;
-          console.log('🔴 Event detail:', customEvent.detail);
-          const audioContext = secStreamRef.current?.getAudioContext();
-          console.log('🔴 AudioContext state on suspended event:', audioContext?.state);
-          if (audioContext && audioContext.state === 'suspended') {
-            console.log('⚠️ AudioContext is suspended, showing PlayIndicator for user interaction');
-            setPlayState(PlayState.STOPPED);
-            onPlayStateChange?.(PlayState.STOPPED);
-            onAudioContextSuspended?.(true);
-          }
-        };
-
-        const player = secStreamRef.current.getPlayer();
-        console.log('🎮 Attaching event listeners to player:', !!player);
-        console.log('🎮 Player is EventTarget:', player instanceof EventTarget);
-        if (player) {
-          // Test that event listener attachment works
-          const testHandler = () => console.log('🧪 Test event received');
-          player.addEventListener('test', testHandler);
-          player.dispatchEvent(new CustomEvent('test'));
-          player.removeEventListener('test', testHandler);
-
-          // Add a catch-all event listener to see ALL events
-          const allEventsHandler = (event: Event) => {
-            console.log('📢 Event dispatched on player:', event.type, event);
-          };
-          player.addEventListener('suspended', allEventsHandler);
-          player.addEventListener('error', allEventsHandler);
-          player.addEventListener('ended', allEventsHandler);
-
-          player.addEventListener('ended', handleSecStreamEnded);
-          player.addEventListener('error', handleSecStreamError);
-          player.addEventListener('timeupdate', handleSecStreamTimeUpdate);
-          player.addEventListener('suspended', handleSecStreamSuspended);
-          console.log('✅ Event listeners attached, including suspended handler');
-
-          // Verify the listener is attached by checking the player's internal state
-          console.log('🔍 Verifying suspended listener is attached...');
-        }
 
         console.log('🎵 About to call secStreamRef.current.play()');
         try {
@@ -354,7 +309,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         }
       }
     },
-    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, onAudioContextSuspended, playNext]
+    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, onAudioContextSuspended]
   );
 
   const stop = useCallback(() => {

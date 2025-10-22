@@ -54,7 +54,7 @@ export const SECSTREAM_CONFIG = {
 
   // Web Worker configuration for background decryption
   workerConfig: {
-    enabled: true,
+    enabled: true,        // Workers now support CryptoKey export/import
     workerCount: 2,       // Use 2 workers for parallel decryption
     maxQueueSize: 10,     // Max pending tasks per worker
   },

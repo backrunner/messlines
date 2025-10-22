@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import type { ProcessorKeyExchangeRequest } from 'secstream';
 import { sessionManager } from '../../sessions';
 
-export const POST: APIRoute = async ({ params, request }) => {
+export const POST: APIRoute = async ({ params, request, url }) => {
   try {
     const sessionId = params.sessionId;
     if (!sessionId) {
@@ -12,10 +12,13 @@ export const POST: APIRoute = async ({ params, request }) => {
       });
     }
 
+    // Extract trackId from query parameters for multi-track sessions
+    const trackId = url.searchParams.get('trackId') || undefined;
+
     const keyExchangeRequest = await request.json() as ProcessorKeyExchangeRequest<unknown>;
 
-    console.log(`🔑 Key exchange for session: ${sessionId}`);
-    const response = await sessionManager.handleKeyExchange(sessionId, keyExchangeRequest);
+    console.log(`🔑 Key exchange for session: ${sessionId}${trackId ? ` (track: ${trackId})` : ''}`);
+    const response = await sessionManager.handleKeyExchange(sessionId, keyExchangeRequest, trackId);
 
     return new Response(JSON.stringify(response), {
       status: 200,
