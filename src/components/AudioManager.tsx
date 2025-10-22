@@ -5,7 +5,7 @@ import { SecStreamService } from '../services/SecStreamService';
 import PureAudioAnalyzer from './PureAudioAnalyzer';
 
 interface AudioManagerProps {
-  onTrackChange?: (track: AudioTrack, trackIndex: number) => void;
+  onTrackChange?: (track: AudioTrack, trackIndex: number, direction: 'next' | 'prev' | 'none') => void;
   onPlayStateChange?: (state: PlayState) => void;
   onControlsReady?: (controls: AudioControls) => void;
   onSecStreamReady?: (audioContext: AudioContext) => void;
@@ -38,6 +38,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   const [volume, setVolume] = useState<number>(AUDIO_CONFIG.volume);
   const isInitializedRef = useRef(false);
   const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const trackDirectionRef = useRef<'next' | 'prev' | 'none'>('none');
 
   // Audio reactive callbacks reference
   const audioReactiveCallbacks = useRef({
@@ -197,6 +198,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
     // Smooth transition to next track
     console.log(`⏭️ Transitioning to next track: ${nextIndex}`);
+    trackDirectionRef.current = 'next';
     setCurrentTrackIndex(nextIndex);
   }, [shuffledPlaylist, currentTrackIndex, onPlayStateChange]);
 
@@ -209,6 +211,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       prevIndex = shuffledPlaylist.length - 1;
     }
 
+    trackDirectionRef.current = 'prev';
     setCurrentTrackIndex(prevIndex);
   }, [shuffledPlaylist, currentTrackIndex]);
 
@@ -284,7 +287,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         setPlayState(PlayState.PLAYING);
         setCurrentTrackIndex(trackIndex);
 
-        onTrackChange?.(track, trackIndex);
+        // Get and reset direction
+        const direction = trackDirectionRef.current;
+        trackDirectionRef.current = 'none';
+
+        onTrackChange?.(track, trackIndex, direction);
         onPlayStateChange?.(PlayState.PLAYING);
 
       } catch (error) {

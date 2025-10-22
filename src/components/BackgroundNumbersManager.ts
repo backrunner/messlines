@@ -402,11 +402,123 @@ class BackgroundNumbersManager {
     }
   }
 
-  // Public method: set current track
-  public setCurrentTrack(track: any, trackIndex: number) {
+  // Public method: set current track with animation
+  public setCurrentTrack(track: any, trackIndex: number, direction: 'next' | 'prev' | 'none' = 'none') {
     this.currentTrack = track;
+    const previousTrackIndex = this.currentTrackIndex;
     this.currentTrackIndex = trackIndex;
-    this.updateAllZerosContent();
+
+    if (direction !== 'none' && previousTrackIndex !== trackIndex) {
+      // Trigger 3D flip animation and regenerate empty positions
+      this.animateTrackSwitch(direction);
+    } else {
+      this.updateAllZerosContent();
+    }
+  }
+
+  // Animate track switch with 3D cube flip effect
+  private animateTrackSwitch(direction: 'next' | 'prev') {
+    const allKeys = Object.keys(this.zeroGrid);
+    const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
+
+    // Regenerate empty positions randomly
+    const totalPositions = allKeys.length;
+    const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
+    const newEmptyPositions = new Set<string>();
+
+    // Randomly select new empty positions
+    while (newEmptyPositions.size < emptyPositionsCount) {
+      const randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
+      newEmptyPositions.add(randomKey);
+    }
+
+    // Animate each number box with random staggered timing
+    allKeys.forEach((key, index) => {
+      const zeroState = this.zeroGrid[key];
+      if (!zeroState) return;
+
+      const element = zeroState.element;
+      const willBeEmpty = newEmptyPositions.has(key);
+
+      // Random delay between 0-400ms for scattered, random effect across the entire view
+      const randomDelay = Math.random() * 400;
+
+      setTimeout(() => {
+        this.flipNumberBox(element, zeroState, displayNumber, direction, willBeEmpty, key);
+      }, randomDelay);
+    });
+  }
+
+  // Perform 3D cube flip animation on a single number box
+  private flipNumberBox(
+    element: HTMLDivElement,
+    zeroState: ZeroState,
+    newNumber: string,
+    direction: 'next' | 'prev',
+    willBeEmpty: boolean,
+    key: string
+  ) {
+    // Create wrapper for 3D transform
+    const parent = element.parentElement;
+    if (!parent) return;
+
+    // Save original styles
+    const originalTransform = element.style.transform || '';
+    const originalTransition = element.style.transition || '';
+
+    // Set up 3D perspective
+    element.style.transformStyle = 'preserve-3d';
+    element.style.backfaceVisibility = 'hidden';
+
+    // Determine rotation direction
+    const rotationDeg = direction === 'next' ? -90 : 90;
+    const flipDuration = 300; // 300ms flip duration
+
+    // Phase 1: Flip out (0 to 90 degrees)
+    element.style.transition = `transform ${flipDuration / 2}ms cubic-bezier(0.55, 0.085, 0.68, 0.53), opacity ${flipDuration / 2}ms ease-out`;
+    element.style.transform = `rotateY(${rotationDeg}deg)`;
+    element.style.opacity = '0';
+
+    // Phase 2: Update content at midpoint and flip in (90 to 0 degrees)
+    setTimeout(() => {
+      // Update content and empty state
+      const wasEmpty = zeroState.isEmpty;
+      zeroState.isEmpty = willBeEmpty;
+
+      if (willBeEmpty) {
+        element.textContent = '';
+      } else {
+        element.textContent = newNumber;
+      }
+
+      // Randomly change style for variety
+      if (!willBeEmpty && Math.random() < 0.3) {
+        zeroState.isOutline = !zeroState.isOutline;
+      }
+      if (!willBeEmpty && Math.random() < 0.4) {
+        zeroState.opacity = 0.15 + Math.random() * 0.35;
+      }
+
+      // Flip in from opposite direction
+      element.style.transform = `rotateY(${-rotationDeg}deg)`;
+
+      // Small delay before flip in
+      setTimeout(() => {
+        element.style.transition = `transform ${flipDuration / 2}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${flipDuration / 2}ms ease-in`;
+        element.style.transform = 'rotateY(0deg)';
+
+        // Update display with new opacity
+        this.updateZeroDisplay(key);
+      }, 10);
+
+      // Reset transform after animation completes
+      setTimeout(() => {
+        element.style.transformStyle = '';
+        element.style.backfaceVisibility = '';
+        element.style.transform = originalTransform;
+        element.style.transition = originalTransition || 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
+      }, flipDuration / 2 + 50);
+    }, flipDuration / 2);
   }
 
   // Public method: handle audio transients

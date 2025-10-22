@@ -7,6 +7,7 @@ import BackgroundNumbersManager from './BackgroundNumbersManager';
 interface PureAudioVisualizerProps {
   currentTrack?: AudioTrack | null;
   currentTrackIndex?: number;
+  trackDirection?: 'next' | 'prev' | 'none';
   playState?: PlayState;
   isAnimationPaused?: boolean;
   audioReactiveCallbacks?: React.MutableRefObject<{
@@ -15,7 +16,7 @@ interface PureAudioVisualizerProps {
   }>;
 }
 
-const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, playState = PlayState.STOPPED, isAnimationPaused = false, audioReactiveCallbacks }: PureAudioVisualizerProps) => {
+const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirection = 'none', playState = PlayState.STOPPED, isAnimationPaused = false, audioReactiveCallbacks }: PureAudioVisualizerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const backgroundContainerRef = useRef<HTMLDivElement>(null);
   const lineAnimationRef = useRef<PureLineBallAnimation | null>(null);
@@ -62,9 +63,9 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, playState = 
   // Handle track changes
   useEffect(() => {
     if (backgroundNumbersManagerRef.current) {
-      backgroundNumbersManagerRef.current.setCurrentTrack(currentTrack, currentTrackIndex);
+      backgroundNumbersManagerRef.current.setCurrentTrack(currentTrack, currentTrackIndex, trackDirection);
     }
-  }, [currentTrack, currentTrackIndex]);
+  }, [currentTrack, currentTrackIndex, trackDirection]);
 
   // Set audio reactive callbacks
   useEffect(() => {

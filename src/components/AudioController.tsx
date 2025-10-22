@@ -18,6 +18,7 @@ interface AudioControls {
 const AudioController = () => {
   const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
+  const [trackDirection, setTrackDirection] = useState<'next' | 'prev' | 'none'>('none');
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
   const [audioControls, setAudioControls] = useState<AudioControls | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
@@ -30,9 +31,10 @@ const AudioController = () => {
   });
 
   // Handle track change
-  const handleTrackChange = useCallback((track: AudioTrack, trackIndex: number) => {
+  const handleTrackChange = useCallback((track: AudioTrack, trackIndex: number, direction: 'next' | 'prev' | 'none') => {
     setCurrentTrack(track);
     setCurrentTrackIndex(trackIndex);
+    setTrackDirection(direction);
   }, []);
 
   // Handle play state change
@@ -100,7 +102,7 @@ const AudioController = () => {
       )}
 
       {/* Pure JavaScript Audio Visualizer - high performance, no React re-renders */}
-      <PureAudioVisualizer currentTrack={currentTrack} currentTrackIndex={currentTrackIndex} playState={playState} isAnimationPaused={isAnimationPaused} audioReactiveCallbacks={audioReactiveCallbacks} />
+      <PureAudioVisualizer currentTrack={currentTrack} currentTrackIndex={currentTrackIndex} trackDirection={trackDirection} playState={playState} isAnimationPaused={isAnimationPaused} audioReactiveCallbacks={audioReactiveCallbacks} />
     </>
   );
 };
