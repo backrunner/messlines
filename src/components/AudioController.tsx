@@ -6,6 +6,7 @@ import PureAudioVisualizer from './PureAudioVisualizer';
 import UserInteractionController from './UserInteractionController';
 import PauseIndicator from './PauseIndicator';
 import PlayIndicator from './PlayIndicator';
+import BottomOverlay from './BottomOverlay';
 
 interface AudioControls {
   togglePlayPause: () => void;
@@ -103,6 +104,9 @@ const AudioController = () => {
 
       {/* Pure JavaScript Audio Visualizer - high performance, no React re-renders */}
       <PureAudioVisualizer currentTrack={currentTrack} currentTrackIndex={currentTrackIndex} trackDirection={trackDirection} playState={playState} isAnimationPaused={isAnimationPaused} audioReactiveCallbacks={audioReactiveCallbacks} />
+
+      {/* Bottom Overlay - shows track info and music platform links */}
+      <BottomOverlay currentTrack={currentTrack} />
     </>
   );
 };

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from '@iconify/react';
 import { MUSIC_PLATFORM_LINKS, BRAND_CONFIG } from '../constants/links';
+import type { AudioTrack } from '../constants/playlist';
 
 // Music platform icon component
 const MusicPlatformIcon = ({ platform }: { platform: (typeof MUSIC_PLATFORM_LINKS)[0] }) => {
@@ -28,8 +29,13 @@ const MusicPlatformIcon = ({ platform }: { platform: (typeof MUSIC_PLATFORM_LINK
   );
 };
 
-const BottomOverlay = () => {
+interface BottomOverlayProps {
+  currentTrack?: AudioTrack | null;
+}
+
+const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [showTrackInfo, setShowTrackInfo] = useState(false);
 
   useEffect(() => {
     // Show component after 3 seconds
@@ -40,11 +46,40 @@ const BottomOverlay = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    // Show track info when we have a track with a cover
+    if (currentTrack?.coverKey) {
+      // Delay slightly to allow for smooth transition
+      const timer = setTimeout(() => {
+        setShowTrackInfo(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setShowTrackInfo(false);
+    }
+  }, [currentTrack]);
+
+  const coverUrl = currentTrack?.coverKey
+    ? `/api/covers/${currentTrack.coverKey.split('/').pop()}`
+    : null;
+
   return (
     <div className={`bottom-overlay ${isVisible ? 'visible' : ''}`} role="complementary" aria-label="MessLines brand and music platform links">
-      {/* Brand text in bottom left */}
+      {/* Brand and track info section in bottom left */}
       <div className="brand-section">
-        <h1 className="brand-name">{BRAND_CONFIG.name}</h1>
+        <div className={`track-info-container ${showTrackInfo ? 'show-track' : ''}`}>
+          {coverUrl && (
+            <div className="cover-wrapper">
+              <img src={coverUrl} alt={`${currentTrack?.title} cover`} className="cover-image" />
+            </div>
+          )}
+          <div className="text-info">
+            {showTrackInfo && currentTrack && (
+              <div className="track-title">{currentTrack.title}</div>
+            )}
+            <h1 className="brand-name">{BRAND_CONFIG.name}</h1>
+          </div>
+        </div>
       </div>
 
       {/* Music platform buttons in bottom right */}
@@ -81,6 +116,68 @@ const BottomOverlay = () => {
           pointer-events: auto;
         }
 
+        .track-info-container {
+          display: flex;
+          align-items: flex-end;
+          gap: 1rem;
+          transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          transform-origin: left bottom;
+        }
+
+        .cover-wrapper {
+          opacity: 0;
+          transform: scale(0.8) translateY(10px);
+          transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+          flex-shrink: 0;
+        }
+
+        .track-info-container.show-track .cover-wrapper {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+
+        .cover-image {
+          width: 80px;
+          height: 80px;
+          border-radius: 12px;
+          object-fit: cover;
+          box-shadow:
+            0 4px 12px rgba(0, 0, 0, 0.5),
+            0 8px 24px rgba(0, 0, 0, 0.4),
+            0 12px 40px rgba(0, 0, 0, 0.3);
+          border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .text-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          justify-content: flex-end;
+          min-height: 80px;
+          transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .track-title {
+          font-size: 1.1rem;
+          font-weight: 600;
+          font-family: 'Arial', sans-serif;
+          color: #ffffff;
+          opacity: 0;
+          transform: translateY(10px);
+          transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          text-shadow:
+            0 2px 4px rgba(0, 0, 0, 0.6),
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            0 1px 2px rgba(0, 0, 0, 0.8);
+          letter-spacing: 0.01em;
+        }
+
+        .track-info-container.show-track .track-title {
+          opacity: 0.9;
+          transform: translateY(0);
+          transition-delay: 0.2s;
+        }
+
         .brand-name {
           font-size: 2rem;
           font-weight: 900;
@@ -92,8 +189,15 @@ const BottomOverlay = () => {
           opacity: 0.65;
           margin: 0;
           letter-spacing: -0.02em;
-          text-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5))
+                  drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
           user-select: none;
+          transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        .track-info-container.show-track .brand-name {
+          font-size: 1rem;
+          opacity: 0.5;
         }
 
         .music-platforms-section {
@@ -118,6 +222,10 @@ const BottomOverlay = () => {
           transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
           position: relative;
           overflow: hidden;
+          box-shadow:
+            0 4px 12px rgba(0, 0, 0, 0.4),
+            0 2px 6px rgba(0, 0, 0, 0.3),
+            0 1px 3px rgba(0, 0, 0, 0.5);
         }
 
         .music-platform-button::before {
@@ -135,7 +243,10 @@ const BottomOverlay = () => {
         .music-platform-button:hover {
           background: rgba(255, 255, 255, 0.2);
           transform: scale(1.1);
-          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+          box-shadow:
+            0 8px 25px rgba(0, 0, 0, 0.5),
+            0 4px 15px rgba(0, 0, 0, 0.4),
+            0 2px 8px rgba(0, 0, 0, 0.6);
         }
 
         .music-platform-button:hover::before {
@@ -169,6 +280,19 @@ const BottomOverlay = () => {
             font-size: 2rem;
           }
 
+          .track-info-container.show-track .brand-name {
+            font-size: 0.9rem;
+          }
+
+          .cover-image {
+            width: 70px;
+            height: 70px;
+          }
+
+          .track-title {
+            font-size: 1rem;
+          }
+
           .music-platforms-section {
             order: -1;
           }
@@ -181,6 +305,20 @@ const BottomOverlay = () => {
 
           .brand-name {
             font-size: 1.8rem;
+          }
+
+          .track-info-container.show-track .brand-name {
+            font-size: 0.85rem;
+          }
+
+          .cover-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+          }
+
+          .track-title {
+            font-size: 0.95rem;
           }
 
           .music-platform-button {

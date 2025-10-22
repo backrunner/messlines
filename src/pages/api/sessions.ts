@@ -32,6 +32,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
+    // Get cache and context for caching
+    const cache = locals.runtime.caches.default;
+    const ctx = locals.runtime.ctx;
+
     // Handle multi-track session creation
     if (audioKeys && audioKeys.length > 0) {
       console.log(`📦 Creating multi-track session with ${audioKeys.length} tracks`);
@@ -41,7 +45,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
       for (let i = 0; i < audioKeys.length; i++) {
         const key = audioKeys[i];
         console.log(`📦 Retrieving audio file: ${key}`);
-        const buffer = await audioHandler.getAudioFromBucket(key, bucket);
+
+        // Try to get from cache first
+        const cacheKey = new Request(`${locals.runtime.env.WORKER_URL || 'https://cache.local'}/audio-cache/${key}`) as unknown as Request;
+        let cachedBuffer = await cache.match(cacheKey as any);
+
+        let buffer: ArrayBuffer;
+        if (cachedBuffer) {
+          console.log(`✅ Cache hit for audio: ${key}`);
+          buffer = await cachedBuffer.arrayBuffer();
+        } else {
+          console.log(`❌ Cache miss for audio: ${key}, fetching from R2...`);
+          buffer = await audioHandler.getAudioFromBucket(key, bucket);
+
+          // Cache the audio file asynchronously
+          if (ctx && ctx.waitUntil) {
+            const responseToCache = new Response(buffer, {
+              headers: {
+                'Content-Type': 'audio/mpeg',
+                'Cache-Control': 'public, max-age=31536000, immutable',
+              }
+            });
+            ctx.waitUntil(cache.put(cacheKey as any, responseToCache as any));
+            console.log(`💾 Caching audio: ${key}`);
+          }
+        }
+
         tracks.push({
           audioData: buffer,
           metadata: {
@@ -71,7 +100,31 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Handle single track session creation (legacy)
     console.log(`📦 Retrieving audio file: ${audioKey}`);
-    const audioBuffer = await audioHandler.getAudioFromBucket(audioKey!, bucket);
+
+    // Try to get from cache first
+    const cacheKey = new Request(`${locals.runtime.env.WORKER_URL || 'https://cache.local'}/audio-cache/${audioKey}`) as unknown as Request;
+    let cachedBuffer = await cache.match(cacheKey as any);
+
+    let audioBuffer: ArrayBuffer;
+    if (cachedBuffer) {
+      console.log(`✅ Cache hit for audio: ${audioKey}`);
+      audioBuffer = await cachedBuffer.arrayBuffer();
+    } else {
+      console.log(`❌ Cache miss for audio: ${audioKey}, fetching from R2...`);
+      audioBuffer = await audioHandler.getAudioFromBucket(audioKey!, bucket);
+
+      // Cache the audio file asynchronously
+      if (ctx && ctx.waitUntil) {
+        const responseToCache = new Response(audioBuffer, {
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          }
+        });
+        ctx.waitUntil(cache.put(cacheKey as any, responseToCache as any));
+        console.log(`💾 Caching audio: ${audioKey}`);
+      }
+    }
 
     console.log('📊 Audio buffer size:', audioBuffer.byteLength);
 

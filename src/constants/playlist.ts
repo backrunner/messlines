@@ -5,7 +5,7 @@ export interface AudioTrack {
   title: string;
   audioKey: string;
   duration?: number;
-  cover?: string;
+  coverKey?: string;
 }
 
 export const AUDIO_PLAYLIST: AudioTrack[] = [
@@ -17,17 +17,20 @@ export const AUDIO_PLAYLIST: AudioTrack[] = [
   {
     id: 1,
     title: "Falling Flowers",
-    audioKey: "audio/falling_flowers.mp3"
+    audioKey: "audio/falling_flowers.mp3",
+    coverKey: "cover/falling_flowers.png"
   },
   {
     id: 2,
     title: "Soul Flashback",
-    audioKey: "audio/soul_flashback.mp3"
+    audioKey: "audio/soul_flashback.mp3",
+    coverKey: "cover/soul_flashback.png"
   },
   {
     id: 3,
     title: "Sink in Sick",
-    audioKey: "audio/sink_in_sick.mp3"
+    audioKey: "audio/sink_in_sick.mp3",
+    coverKey: "cover/sink_in_sick.png"
   },
 ];
 
