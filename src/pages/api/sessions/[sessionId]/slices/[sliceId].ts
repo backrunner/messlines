@@ -31,6 +31,7 @@ export const GET: APIRoute = async ({ params, url }) => {
     // Create response with metadata in headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'public, max-age=300',
       'X-Slice-ID': slice.id,
       'X-Slice-Sequence': slice.sequence.toString(),
       'X-Session-ID': slice.sessionId,
