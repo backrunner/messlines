@@ -1,6 +1,7 @@
 /**
  * Pure JavaScript line ball animation manager
  * Optimized with Web Worker for off-main-thread calculations
+ * Audio-reactive: Syncs with beat and transient detection
  */
 
 interface Point {
@@ -12,6 +13,13 @@ interface LineRenderData {
   id: number;
   thickness: number;
   trailElement: SVGPathElement | null;
+}
+
+interface AudioReactiveOptions {
+  enableBeatSync?: boolean;
+  enableTransientSync?: boolean;
+  beatSensitivity?: number;
+  transientSensitivity?: number;
 }
 
 class PureLineBallAnimation {
@@ -29,12 +37,32 @@ class PureLineBallAnimation {
   // Animation constants
   private readonly CIRCLE_RADIUS = 120;
   private readonly MAX_FLYING_LINES = 15;
+
   private readonly LINE_SPAWN_INTERVAL = 200;
 
   private spawnInterval: number | null = null;
 
-  constructor(container: HTMLDivElement) {
+  // Audio-reactive mode
+  private audioReactiveMode: boolean = false;
+  private audioOptions: AudioReactiveOptions = {
+    enableBeatSync: true,
+    enableTransientSync: true,
+    beatSensitivity: 0.4,
+    transientSensitivity: 0.3,
+  };
+
+  // Rate limiting for audio-reactive spawning
+  private lastBeatSpawnTime: number = 0;
+  private lastTransientSpawnTime: number = 0;
+  private readonly BEAT_SPAWN_COOLDOWN = 150; // ms between beat spawns
+  private readonly TRANSIENT_SPAWN_COOLDOWN = 100; // ms between transient spawns
+  private readonly AUDIO_SPAWN_CHANCE = 0.3; // 30% chance to spawn on each trigger
+
+  constructor(container: HTMLDivElement, audioReactiveOptions?: AudioReactiveOptions) {
     this.container = container;
+    if (audioReactiveOptions) {
+      this.audioOptions = { ...this.audioOptions, ...audioReactiveOptions };
+    }
     this.initializeContainer();
     this.createSVG();
     this.updateDimensions();
@@ -268,6 +296,90 @@ class PureLineBallAnimation {
     }
 
     this.animationFrameId = requestAnimationFrame(this.animate);
+  };
+
+  // Audio-reactive methods
+  /**
+   * Enable audio-reactive mode - adds additional lines on beat/transient detection
+   * The automatic spawning continues as normal, audio events trigger EXTRA lines
+   */
+  public enableAudioReactiveMode(options?: AudioReactiveOptions) {
+    if (options) {
+      this.audioOptions = { ...this.audioOptions, ...options };
+    }
+    this.audioReactiveMode = true;
+    console.log('🎵 Audio-reactive mode enabled - audio will trigger additional lines');
+  }
+
+  /**
+   * Disable audio-reactive mode - stops responding to audio events
+   */
+  public disableAudioReactiveMode() {
+    this.audioReactiveMode = false;
+    console.log('🎵 Audio-reactive mode disabled');
+  }
+
+  /**
+   * Handle beat detection from audio analyzer
+   * Spawns ADDITIONAL lines based on beat strength (with rate limiting)
+   */
+  public onBeatDetected = (strength: number) => {
+    if (!this.audioReactiveMode || !this.audioOptions.enableBeatSync) {
+      return;
+    }
+
+    // Check if beat is strong enough
+    if (strength < (this.audioOptions.beatSensitivity || 0.4)) {
+      return;
+    }
+
+    // Rate limiting - check cooldown
+    const now = Date.now();
+    if (now - this.lastBeatSpawnTime < this.BEAT_SPAWN_COOLDOWN) {
+      return;
+    }
+
+    // Probabilistic spawning - only spawn 30% of the time to avoid overcrowding
+    if (Math.random() > this.AUDIO_SPAWN_CHANCE) {
+      return;
+    }
+
+    this.lastBeatSpawnTime = now;
+
+    // Spawn 1 additional line on strong beats
+    // Don't spawn multiple lines - keep it subtle
+    this.spawnLine();
+  };
+
+  /**
+   * Handle transient detection from audio analyzer
+   * Spawns ADDITIONAL lines on high-frequency transients (with rate limiting)
+   */
+  public onTransientDetected = (intensity: number, frequency: 'low' | 'mid' | 'high') => {
+    if (!this.audioReactiveMode || !this.audioOptions.enableTransientSync) {
+      return;
+    }
+
+    // Check if transient is strong enough
+    if (intensity < (this.audioOptions.transientSensitivity || 0.3)) {
+      return;
+    }
+
+    // Rate limiting - check cooldown
+    const now = Date.now();
+    if (now - this.lastTransientSpawnTime < this.TRANSIENT_SPAWN_COOLDOWN) {
+      return;
+    }
+
+    // Probabilistic spawning - only spawn 30% of the time
+    if (Math.random() > this.AUDIO_SPAWN_CHANCE) {
+      return;
+    }
+
+    this.lastTransientSpawnTime = now;
+
+    // Spawn 1 additional line on transients
+    this.spawnLine();
   };
 
   // Public methods

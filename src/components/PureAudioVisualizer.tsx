@@ -26,8 +26,16 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
   useEffect(() => {
     if (!containerRef.current || !backgroundContainerRef.current) return;
 
-    // Initialize line animation
-    lineAnimationRef.current = new PureLineBallAnimation(containerRef.current);
+    // Initialize line animation with audio-reactive options
+    lineAnimationRef.current = new PureLineBallAnimation(containerRef.current, {
+      enableBeatSync: true,
+      enableTransientSync: true,
+      beatSensitivity: 0.4,
+      transientSensitivity: 0.3,
+    });
+
+    // Enable audio-reactive mode (disables automatic spawning, uses audio events instead)
+    lineAnimationRef.current.enableAudioReactiveMode();
 
     // Initialize background numbers manager
     backgroundNumbersManagerRef.current = new BackgroundNumbersManager(backgroundContainerRef.current);
@@ -69,13 +77,21 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
 
   // Set audio reactive callbacks
   useEffect(() => {
-    if (audioReactiveCallbacks && backgroundNumbersManagerRef.current) {
+    if (audioReactiveCallbacks) {
       audioReactiveCallbacks.current.onTransient = (intensity: number, frequency: 'low' | 'mid' | 'high') => {
+        // Forward to background numbers manager
         backgroundNumbersManagerRef.current?.handleTransient(intensity, frequency);
+
+        // Forward to line ball animation
+        lineAnimationRef.current?.onTransientDetected(intensity, frequency);
       };
 
       audioReactiveCallbacks.current.onBeat = (strength: number) => {
+        // Forward to background numbers manager
         backgroundNumbersManagerRef.current?.handleBeat(strength);
+
+        // Forward to line ball animation
+        lineAnimationRef.current?.onBeatDetected(strength);
       };
     }
   }, [audioReactiveCallbacks]);
