@@ -79,13 +79,19 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
     console.log(`✅ Serving cover: ${coverKey}, size: ${imageBuffer.byteLength} bytes`);
 
-    // Create response with cache headers
+    // Calculate expiration date (1 year from now)
+    const expiresDate = new Date();
+    expiresDate.setFullYear(expiresDate.getFullYear() + 1);
+
+    // Create response with aggressive cache headers
     const response = new Response(imageBuffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
+        'Cache-Control': 'public, max-age=31536000, stale-while-revalidate=86400, immutable', // Cache for 1 year, allow stale for 1 day
+        'Expires': expiresDate.toUTCString(), // HTTP/1.0 compatibility
         'ETag': object.etag || `"${coverKey}"`,
+        'Last-Modified': object.uploaded?.toUTCString() || new Date().toUTCString(),
       }
     });
 

@@ -39,6 +39,8 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
   const [trackSlotA, setTrackSlotA] = useState<AudioTrack | null>(null);
   const [trackSlotB, setTrackSlotB] = useState<AudioTrack | null>(null);
   const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
+  const [coverLoadedA, setCoverLoadedA] = useState(false);
+  const [coverLoadedB, setCoverLoadedB] = useState(false);
 
   useEffect(() => {
     // Show component after 3 seconds
@@ -70,9 +72,13 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
       // Only switch slots if the track actually changed
       if (!currentActiveTrack || currentTrack.title !== currentActiveTrack.title) {
         if (activeSlot === 'A') {
+          // Switch to slot B immediately, reset its load state
+          setCoverLoadedB(false);
           setTrackSlotB(currentTrack);
           setActiveSlot('B');
         } else {
+          // Switch to slot A immediately, reset its load state
+          setCoverLoadedA(false);
           setTrackSlotA(currentTrack);
           setActiveSlot('A');
         }
@@ -98,17 +104,31 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
             {/* Slot A */}
             {coverUrlA && (
               <img
+                ref={(img) => {
+                  if (img && img.complete && img.naturalHeight !== 0) {
+                    setCoverLoadedA(true);
+                  }
+                }}
                 src={coverUrlA}
                 alt={`${trackSlotA?.title} cover`}
-                className={`cover-image cover-slot-a ${activeSlot === 'A' ? 'active' : 'inactive'}`}
+                className={`cover-image cover-slot-a ${activeSlot === 'A' ? 'active' : 'inactive'} ${coverLoadedA ? 'loaded' : ''}`}
+                onLoad={() => setCoverLoadedA(true)}
+                loading="eager"
               />
             )}
             {/* Slot B */}
             {coverUrlB && (
               <img
+                ref={(img) => {
+                  if (img && img.complete && img.naturalHeight !== 0) {
+                    setCoverLoadedB(true);
+                  }
+                }}
                 src={coverUrlB}
                 alt={`${trackSlotB?.title} cover`}
-                className={`cover-image cover-slot-b ${activeSlot === 'B' ? 'active' : 'inactive'}`}
+                className={`cover-image cover-slot-b ${activeSlot === 'B' ? 'active' : 'inactive'} ${coverLoadedB ? 'loaded' : ''}`}
+                onLoad={() => setCoverLoadedB(true)}
+                loading="eager"
               />
             )}
           </div>
@@ -209,19 +229,37 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
           position: absolute;
           top: 0;
           left: 0;
-          transition: opacity 0.3s ease;
+          transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          will-change: opacity;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          transform: translateZ(0);
+          -webkit-transform: translateZ(0);
         }
 
         .cover-slot-a, .cover-slot-b {
           opacity: 0;
+          pointer-events: none;
+          z-index: 1;
         }
 
+        /* Active slot but not loaded yet - stay transparent */
         .cover-slot-a.active, .cover-slot-b.active {
+          opacity: 0;
+          pointer-events: auto;
+          z-index: 2;
+        }
+
+        /* Active AND loaded - show it */
+        .cover-slot-a.active.loaded, .cover-slot-b.active.loaded {
           opacity: 1;
         }
 
+        /* Inactive - always transparent, even if loaded */
         .cover-slot-a.inactive, .cover-slot-b.inactive {
           opacity: 0;
+          pointer-events: none;
+          z-index: 1;
         }
 
         .track-title-wrapper {
@@ -371,56 +409,125 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
 
         /* Responsive design */
         @media (max-width: 768px) {
-          .bottom-overlay {
-            padding: 1.5rem;
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
-          }
-
-          .brand-name {
-            font-size: 2rem;
-          }
-
-          .track-info-container.show-track .brand-name {
-            font-size: 0.9rem;
+          /* Override desktop transitions and transforms */
+          .cover-wrapper,
+          .track-info-container.show-track .cover-wrapper {
+            transition: opacity 0.3s ease, transform 0.3s ease !important;
           }
 
           .cover-image {
-            width: 70px;
-            height: 70px;
+            transition: opacity 0.3s ease !important;
+            will-change: opacity !important;
+          }
+
+          .bottom-overlay {
+            padding: 1.5rem 1.5rem calc(1rem + env(safe-area-inset-bottom, 0px));
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.875rem;
+          }
+
+          .brand-section {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+          }
+
+          .track-info-container {
+            height: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 0.875rem;
+          }
+
+          .cover-wrapper {
+            width: 64px;
+            height: 64px;
+            position: relative;
+            left: auto;
+            bottom: auto;
+            opacity: 0;
+            transform: translateY(10px);
+            overflow: hidden;
+            flex-shrink: 0;
+            border-radius: 12px;
+          }
+
+          .track-info-container.show-track .cover-wrapper {
+            opacity: 1;
+            transform: translateY(0);
+          }
+
+          .cover-image {
+            width: 64px;
+            height: 64px;
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            object-fit: cover;
+            border-radius: 12px;
+          }
+
+          .track-title-wrapper {
+            position: relative;
+            left: auto;
+            bottom: auto;
+            transform: none;
+            text-align: center;
+            width: 100%;
+            height: 1rem;
+          }
+
+          .track-info-container.show-track .track-title-wrapper {
+            left: auto;
+            transform: none;
+          }
+
+          .title-slot-a, .title-slot-b {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
           }
 
           .track-title {
             font-size: 1rem;
+            line-height: 1rem;
+          }
+
+          .brand-name-wrapper {
+            position: relative;
+            left: auto;
+            bottom: auto;
+            transform: none;
+            text-align: center;
+            transition: opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+          }
+
+          .track-info-container.show-track .brand-name-wrapper {
+            left: auto;
+            transform: none;
+            opacity: 0;
+            pointer-events: none;
+          }
+
+          .brand-name {
+            font-size: 1.6rem;
+          }
+
+          .track-info-container.show-track .brand-name {
+            font-size: 1.6rem;
           }
 
           .music-platforms-section {
             order: -1;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .bottom-overlay {
-            padding: 1rem;
-          }
-
-          .brand-name {
-            font-size: 1.8rem;
-          }
-
-          .track-info-container.show-track .brand-name {
-            font-size: 0.85rem;
-          }
-
-          .cover-image {
-            width: 60px;
-            height: 60px;
-            border-radius: 10px;
-          }
-
-          .track-title {
-            font-size: 0.95rem;
+            gap: 0.75rem;
           }
 
           .music-platform-button {
@@ -431,6 +538,59 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
           .music-platform-button svg {
             width: 18px;
             height: 18px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .bottom-overlay {
+            padding: 1rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+            gap: 0.875rem;
+          }
+
+          .track-info-container {
+            gap: 0.875rem;
+          }
+
+          .track-title-wrapper {
+            height: 0.9rem;
+          }
+
+          .cover-wrapper {
+            width: 56px;
+            height: 56px;
+          }
+
+          .cover-image {
+            width: 56px;
+            height: 56px;
+            border-radius: 10px;
+          }
+
+          .track-title {
+            font-size: 0.9rem;
+            line-height: 0.9rem;
+          }
+
+          .brand-name {
+            font-size: 1.4rem;
+          }
+
+          .track-info-container.show-track .brand-name {
+            font-size: 1.4rem;
+          }
+
+          .music-platforms-section {
+            gap: 0.5rem;
+          }
+
+          .music-platform-button {
+            width: 40px;
+            height: 40px;
+          }
+
+          .music-platform-button svg {
+            width: 16px;
+            height: 16px;
           }
         }
 
@@ -463,7 +623,11 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
         @media (prefers-reduced-motion: reduce) {
           .bottom-overlay,
           .music-platform-button,
-          .music-platform-button svg {
+          .music-platform-button svg,
+          .cover-wrapper,
+          .cover-image,
+          .track-title,
+          .brand-name-wrapper {
             transition: none;
           }
 
@@ -477,6 +641,10 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
           }
 
           .music-platform-button:hover svg {
+            transform: none;
+          }
+
+          .track-info-container.show-track .cover-wrapper {
             transform: none;
           }
         }
