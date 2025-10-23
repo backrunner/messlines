@@ -360,6 +360,11 @@ class PureLineBallAnimation {
       return;
     }
 
+    // Only respond to mid and high frequency transients, not low frequency
+    if (frequency === 'low') {
+      return;
+    }
+
     // Check if transient is strong enough
     if (intensity < (this.audioOptions.transientSensitivity || 0.3)) {
       return;
