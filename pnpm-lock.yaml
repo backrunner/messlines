@@ -36,12 +36,9 @@ importers:
         specifier: ^19.2.0
         version: 19.2.0(react@19.2.0)
       secstream:
-        specifier: file:..\..\audio-secure-transfer
-        version: file:../../audio-secure-transfer
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20251011.0
-        version: 4.20251011.0
       wrangler:
         specifier: ^4.44.0
         version: 4.44.0(@cloudflare/workers-types@4.20251011.0)
@@ -1812,8 +1809,8 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
-  secstream@file:../../audio-secure-transfer:
-    resolution: {directory: ../../audio-secure-transfer, type: directory}
+  secstream@0.1.1:
+    resolution: {integrity: sha512-0m63LQHJ9l31qA73Ldb4yxTMMuIC5FdNnTr9J3GZqDds+a1+ERnMgRiwUYR6tKU257od+ndkoP0gQr6Rj2W//w==}
     engines: {node: '>=18', pnpm: '>=10.0.0'}
 
   semver@6.3.1:
@@ -4166,7 +4163,7 @@ snapshots:
 
   scheduler@0.27.0: {}
 
-  secstream@file:../../audio-secure-transfer:
+  secstream@0.1.1:
     dependencies:
       fflate: 0.8.2
       nanoid: 5.1.6
