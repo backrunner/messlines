@@ -14,12 +14,21 @@ importers:
       '@astrojs/react':
         specifier: ^4.4.0
         version: 4.4.0(@types/node@24.8.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@cf-wasm/photon':
-        specifier: ^0.1.31
-        version: 0.1.31
       '@iconify/react':
         specifier: ^6.0.2
         version: 6.0.2(react@19.2.0)
+      '@jsquash/avif':
+        specifier: ^2.1.1
+        version: 2.1.1
+      '@jsquash/jpeg':
+        specifier: ^1.6.0
+        version: 1.6.0
+      '@jsquash/png':
+        specifier: ^3.1.1
+        version: 3.1.1
+      '@jsquash/webp':
+        specifier: ^1.5.0
+        version: 1.5.0
       '@types/react':
         specifier: ^19.2.2
         version: 19.2.2
@@ -168,12 +177,6 @@ packages:
   '@capsizecss/unpack@3.0.0':
     resolution: {integrity: sha512-+ntATQe1AlL7nTOYjwjj6w3299CgRot48wL761TUGYpYgAou3AaONZazp0PKZyCyWhudWsjhq1nvRHOvbMzhTA==}
     engines: {node: '>=18'}
-
-  '@cf-wasm/internals@0.0.3':
-    resolution: {integrity: sha512-v6PmiQnJIrVvL2IdPg5aCqARSKw/U1JvFsms2cCt3Szx3/3EvtVVhN9MALCh6kZ2CV2fvzs3tmiYezRQ6JyqcQ==}
-
-  '@cf-wasm/photon@0.1.31':
-    resolution: {integrity: sha512-czB1kvK8L1oKsBcQxNhWn5JyIlXrXF+Fd61kQSZSwxi+ol7ikqf9SPnEVQ//C3MW9bzp62eCVMetoB5+9iMsvw==}
 
   '@cloudflare/kv-asset-handler@0.4.0':
     resolution: {integrity: sha512-+tv3z+SPp+gqTIcImN9o0hqE9xyfQjI1XD9pL6NuKjua9B1y7mNYv0S9cP+QEbA4ppVgGZEmKOvHX5G5Ei1CVA==}
@@ -830,6 +833,18 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@jsquash/avif@2.1.1':
+    resolution: {integrity: sha512-LMRxd0fMgfCLtobDh0/sFYJMMiRJTNYSEEWvRDKXlAeZ08t3gI5V+1thIT0XjXJ+SVG7Zug9B0XPyx0Ti5VRNA==}
+
+  '@jsquash/jpeg@1.6.0':
+    resolution: {integrity: sha512-zwN46Awh1VM6gXlIcALwb5WzqK5H2e6+Awcs1QP8AvS8ohsK/sbE4esvmH4jhlhW7+CgiUUww66vg0aTnlSIMA==}
+
+  '@jsquash/png@3.1.1':
+    resolution: {integrity: sha512-C10pc+0H6j0h8fENOfnGOvkXCmvpSQTDGlfGd0sHphZhPSGTyLjIrHba0FaZZdsKqA/wlmhYicUHb92vfZphaw==}
+
+  '@jsquash/webp@1.5.0':
+    resolution: {integrity: sha512-KggLoj2MnRSfIqTeKe1EmbljTX2vuV7mh79k89PCL1pyqiDULcPM1L47twxXt0hkb68F70bXiL31MxsuoZtKFw==}
 
   '@oslojs/encoding@1.1.0':
     resolution: {integrity: sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ==}
@@ -2107,6 +2122,9 @@ packages:
       vite:
         optional: true
 
+  wasm-feature-detect@1.8.0:
+    resolution: {integrity: sha512-zksaLKM2fVlnB5jQQDqKXXwYHLQUVH9es+5TOOHwGOVJOCeRBCiPjwSg+3tN2AdTCzjgli4jijCH290kXb/zWQ==}
+
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
 
@@ -2424,12 +2442,6 @@ snapshots:
   '@capsizecss/unpack@3.0.0':
     dependencies:
       fontkit: 2.0.4
-
-  '@cf-wasm/internals@0.0.3': {}
-
-  '@cf-wasm/photon@0.1.31':
-    dependencies:
-      '@cf-wasm/internals': 0.0.3
 
   '@cloudflare/kv-asset-handler@0.4.0':
     dependencies:
@@ -2835,6 +2847,18 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@jsquash/avif@2.1.1':
+    dependencies:
+      wasm-feature-detect: 1.8.0
+
+  '@jsquash/jpeg@1.6.0': {}
+
+  '@jsquash/png@3.1.1': {}
+
+  '@jsquash/webp@1.5.0':
+    dependencies:
+      wasm-feature-detect: 1.8.0
 
   '@oslojs/encoding@1.1.0': {}
 
@@ -4451,6 +4475,8 @@ snapshots:
   vitefu@1.1.1(vite@6.4.0(@types/node@24.8.1)):
     optionalDependencies:
       vite: 6.4.0(@types/node@24.8.1)
+
+  wasm-feature-detect@1.8.0: {}
 
   web-namespaces@2.0.1: {}
 

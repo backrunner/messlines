@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
-import { PhotonImage } from '@cf-wasm/photon';
-
 import { AUDIO_PLAYLIST } from '../../../constants/playlist';
+import { decode as decodeJpeg } from '@jsquash/jpeg';
+import { decode as decodePng } from '@jsquash/png';
+import { encode as encodeWebp } from '@jsquash/webp';
+import { encode as encodeAvif } from '@jsquash/avif';
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
   try {
@@ -106,46 +108,36 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       console.log(`🔄 Converting ${coverKey} to WebP`);
     }
 
-    // Perform image conversion if needed using Photon WASM
+    // Perform image conversion if needed using @jsquash
     if (needsConversion) {
       try {
-        // Convert ArrayBuffer to Uint8Array for Photon
-        const imageBytes = new Uint8Array(imageBuffer);
-        
-        // Create PhotonImage from bytes
-        const photonImage = PhotonImage.new_from_byteslice(imageBytes);
-        
-        // Convert to target format
-        let convertedBytes: Uint8Array;
-        if (outputFormat === 'image/avif') {
-          // Note: Check if get_bytes_avif is available at runtime
-          // @ts-ignore - get_bytes_avif might exist at runtime but not in types
-          if (typeof photonImage.get_bytes_avif === 'function') {
-            // @ts-ignore
-            convertedBytes = photonImage.get_bytes_avif();
-            contentType = 'image/avif';
-            console.log(`✅ Converted to AVIF, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
-          } else {
-            console.warn(`⚠️ AVIF not supported, falling back to WebP`);
-            convertedBytes = photonImage.get_bytes_webp();
-            contentType = 'image/webp';
-            console.log(`✅ Converted to WebP, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
-          }
-        } else if (outputFormat === 'image/webp') {
-          convertedBytes = photonImage.get_bytes_webp();
-          contentType = 'image/webp';
-          console.log(`✅ Converted to WebP, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
+        // Decode the original image to ImageData
+        let imageData: ImageData;
+        if (contentType === 'image/jpeg') {
+          imageData = await decodeJpeg(imageBuffer);
+        } else if (contentType === 'image/png') {
+          imageData = await decodePng(imageBuffer);
+        } else if (contentType === 'image/webp') {
+          // If source is already WebP and we want AVIF, decode it first
+          const { decode: decodeWebp } = await import('@jsquash/webp');
+          imageData = await decodeWebp(imageBuffer);
         } else {
-          convertedBytes = imageBytes;
+          // For unsupported formats, try PNG decoder as fallback
+          imageData = await decodePng(imageBuffer);
         }
-        
-        // Free the PhotonImage memory
-        photonImage.free();
-        
-        // Update imageBuffer with converted bytes
-        // Create a new ArrayBuffer from the Uint8Array
-        const newBuffer = convertedBytes.buffer;
-        imageBuffer = newBuffer instanceof ArrayBuffer ? newBuffer : (newBuffer.slice(0) as unknown as ArrayBuffer);
+
+        // Encode to target format
+        if (outputFormat === 'image/avif') {
+          const converted = await encodeAvif(imageData);
+          imageBuffer = converted instanceof ArrayBuffer ? converted : (converted as any).buffer;
+          contentType = 'image/avif';
+          console.log(`✅ Converted to AVIF, original size: ${imageBuffer.byteLength} bytes`);
+        } else if (outputFormat === 'image/webp') {
+          const converted = await encodeWebp(imageData);
+          imageBuffer = converted instanceof ArrayBuffer ? converted : (converted as any).buffer;
+          contentType = 'image/webp';
+          console.log(`✅ Converted to WebP, original size: ${imageBuffer.byteLength} bytes`);
+        }
       } catch (conversionError) {
         console.warn(`⚠️ Image conversion failed, serving original format:`, conversionError);
         // Fall back to original format if conversion fails
