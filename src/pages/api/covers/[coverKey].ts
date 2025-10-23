@@ -1,4 +1,6 @@
 import type { APIRoute } from 'astro';
+import { PhotonImage } from '@cf-wasm/photon';
+
 import { AUDIO_PLAYLIST } from '../../../constants/playlist';
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
@@ -29,20 +31,33 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
     console.log(`📷 Looking up cover: ${filename} -> ${coverKey}`);
 
-    // Create cache key from request URL
+    // Determine requested format from Accept header
+    const acceptHeader = request.headers.get('accept') || '';
+    const supportsAvif = acceptHeader.includes('image/avif');
+    const supportsWebp = acceptHeader.includes('image/webp');
+
+    // Create format-specific cache key
+    let formatSuffix = '';
+    if (supportsAvif) {
+      formatSuffix = '?format=avif';
+    } else if (supportsWebp) {
+      formatSuffix = '?format=webp';
+    }
+
+    // Create cache key from request URL with format suffix
     const cache = locals.runtime.caches.default;
-    const cacheUrl = url.toString();
+    const cacheUrl = url.toString().split('?')[0] + formatSuffix;
     const cacheKey = new Request(cacheUrl) as unknown as Request;
 
     // Check if response is in cache
     const cachedResponse = await cache.match(cacheKey as any);
 
     if (cachedResponse) {
-      console.log(`✅ Cache hit for cover: ${coverKey}`);
+      console.log(`✅ Cache hit for cover: ${coverKey}${formatSuffix}`);
       return cachedResponse as unknown as Response;
     }
 
-    console.log(`❌ Cache miss for cover: ${coverKey}, fetching from R2...`);
+    console.log(`❌ Cache miss for cover: ${coverKey}${formatSuffix}, fetching from R2...`);
 
     // Get R2 bucket from Cloudflare environment
     const bucket = locals.runtime.env.AUDIO_BUCKET;
@@ -75,9 +90,69 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       contentType = 'image/gif';
     }
 
-    const imageBuffer = await object.arrayBuffer();
+    let imageBuffer = await object.arrayBuffer();
 
-    console.log(`✅ Serving cover: ${coverKey}, size: ${imageBuffer.byteLength} bytes`);
+    // Convert image format if client supports modern formats
+    let outputFormat = contentType;
+    let needsConversion = false;
+
+    if (supportsAvif && contentType !== 'image/avif') {
+      outputFormat = 'image/avif';
+      needsConversion = true;
+      console.log(`🔄 Converting ${coverKey} to AVIF`);
+    } else if (supportsWebp && contentType !== 'image/webp') {
+      outputFormat = 'image/webp';
+      needsConversion = true;
+      console.log(`🔄 Converting ${coverKey} to WebP`);
+    }
+
+    // Perform image conversion if needed using Photon WASM
+    if (needsConversion) {
+      try {
+        // Convert ArrayBuffer to Uint8Array for Photon
+        const imageBytes = new Uint8Array(imageBuffer);
+        
+        // Create PhotonImage from bytes
+        const photonImage = PhotonImage.new_from_byteslice(imageBytes);
+        
+        // Convert to target format
+        let convertedBytes: Uint8Array;
+        if (outputFormat === 'image/avif') {
+          // Note: Check if get_bytes_avif is available at runtime
+          // @ts-ignore - get_bytes_avif might exist at runtime but not in types
+          if (typeof photonImage.get_bytes_avif === 'function') {
+            // @ts-ignore
+            convertedBytes = photonImage.get_bytes_avif();
+            contentType = 'image/avif';
+            console.log(`✅ Converted to AVIF, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
+          } else {
+            console.warn(`⚠️ AVIF not supported, falling back to WebP`);
+            convertedBytes = photonImage.get_bytes_webp();
+            contentType = 'image/webp';
+            console.log(`✅ Converted to WebP, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
+          }
+        } else if (outputFormat === 'image/webp') {
+          convertedBytes = photonImage.get_bytes_webp();
+          contentType = 'image/webp';
+          console.log(`✅ Converted to WebP, original: ${imageBuffer.byteLength} bytes, new: ${convertedBytes.byteLength} bytes`);
+        } else {
+          convertedBytes = imageBytes;
+        }
+        
+        // Free the PhotonImage memory
+        photonImage.free();
+        
+        // Update imageBuffer with converted bytes
+        // Create a new ArrayBuffer from the Uint8Array
+        const newBuffer = convertedBytes.buffer;
+        imageBuffer = newBuffer instanceof ArrayBuffer ? newBuffer : (newBuffer.slice(0) as unknown as ArrayBuffer);
+      } catch (conversionError) {
+        console.warn(`⚠️ Image conversion failed, serving original format:`, conversionError);
+        // Fall back to original format if conversion fails
+      }
+    }
+
+    console.log(`✅ Serving cover: ${coverKey}, format: ${contentType}, size: ${imageBuffer.byteLength} bytes`);
 
     // Calculate expiration date (1 year from now)
     const expiresDate = new Date();
@@ -92,6 +167,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
         'Expires': expiresDate.toUTCString(), // HTTP/1.0 compatibility
         'ETag': object.etag || `"${coverKey}"`,
         'Last-Modified': object.uploaded?.toUTCString() || new Date().toUTCString(),
+        'Vary': 'Accept', // Important: Tell caches that response varies by Accept header
       }
     });
 
