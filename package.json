@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "wrangler types && astro dev",
     "build": "wrangler types && astro build",
-    "preview": "wrangler types && astro preview",
     "deploy": "pnpm run build && wrangler deploy --env=\"\"",
     "deploy:prod": "pnpm run build && wrangler deploy --env=production",
     "astro": "astro"

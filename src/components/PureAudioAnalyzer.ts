@@ -60,14 +60,12 @@ class PureAudioAnalyzer {
     this.initializeWorker();
   }
 
-  private initializeWorker() {
+  private async initializeWorker() {
     try {
-      // Create worker from the worker file
-      const workerUrl = new URL('../workers/audio-analyzer.worker.ts', import.meta.url);
-
-      this.worker = new Worker(workerUrl, {
-        type: 'module'
-      });
+      this.worker = new Worker(
+        new URL('./AudioAnalyzerWorker.ts', import.meta.url),
+        { type: 'module' }
+      );
 
       // Handle worker messages
       this.worker.onmessage = (event: MessageEvent) => {
