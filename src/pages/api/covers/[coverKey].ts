@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { AUDIO_PLAYLIST } from '../../../constants/playlist';
 import { decode as decodeJpeg } from '@jsquash/jpeg';
 import { decode as decodePng } from '@jsquash/png';
-import { encode as encodeWebp } from '@jsquash/webp';
+import { encode as encodeWebp, decode as decodeWebp } from '@jsquash/webp';
 import { encode as encodeAvif } from '@jsquash/avif';
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
@@ -119,7 +119,6 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
           imageData = await decodePng(imageBuffer);
         } else if (contentType === 'image/webp') {
           // If source is already WebP and we want AVIF, decode it first
-          const { decode: decodeWebp } = await import('@jsquash/webp');
           imageData = await decodeWebp(imageBuffer);
         } else {
           // For unsupported formats, try PNG decoder as fallback
