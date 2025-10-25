@@ -3,6 +3,11 @@
  * Direct DOM manipulation to avoid React re-render performance issues
  */
 
+enum DisplayMode {
+  INDEX = 'index',
+  TITLE = 'title',
+}
+
 interface ZeroState {
   isOutline: boolean;
   opacity: number;
@@ -18,12 +23,19 @@ interface AudioReactiveState {
   dominantFrequency: 'low' | 'mid' | 'high';
 }
 
+interface SessionModeData {
+  mode: DisplayMode;
+  expiresAt: number;
+}
+
 class BackgroundNumbersManager {
   private container: HTMLDivElement | null = null;
   private zeroGrid: { [key: string]: ZeroState } = {};
   private numbersVisible = false;
   private currentTrackIndex = 0;
   private currentTrack: any = null;
+  private displayMode: DisplayMode = DisplayMode.TITLE;
+  private displayCharacters: string[] = []; // Array of individual characters to display
   private audioReactiveState: AudioReactiveState = {
     transientActive: false,
     beatActive: false,
@@ -41,12 +53,60 @@ class BackgroundNumbersManager {
   private readonly SPACING = this.FONT_SIZE * 0.8;
   private readonly OVERFLOW = this.FONT_SIZE;
   private readonly MIN_EMPTY_PERCENTAGE = 0.1; // At least 10% of positions should be empty
+  private readonly SESSION_STORAGE_KEY = 'background-display-mode';
+  private readonly MODE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
   constructor(containerElement: HTMLDivElement) {
     this.container = containerElement;
     this.initializeContainer();
+    this.initializeDisplayMode();
     this.generateInitialGrid();
     this.startPeriodicUpdates();
+  }
+
+  /**
+   * Initialize display mode from session storage or randomly select one
+   */
+  private initializeDisplayMode() {
+    try {
+      const stored = sessionStorage.getItem(this.SESSION_STORAGE_KEY);
+      if (stored) {
+        const data: SessionModeData = JSON.parse(stored);
+        const now = Date.now();
+
+        // Check if mode has expired
+        if (data.expiresAt > now) {
+          this.displayMode = data.mode;
+          console.log(`📋 Restored display mode from session: ${data.mode}`);
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to read session storage:', error);
+    }
+
+    // Randomly select a mode
+    const modes = [DisplayMode.TITLE, DisplayMode.INDEX];
+    this.displayMode = modes[Math.floor(Math.random() * modes.length)];
+
+    // Save to session storage
+    this.saveDisplayMode();
+    console.log(`🎲 Randomly selected display mode: ${this.displayMode}`);
+  }
+
+  /**
+   * Save current display mode to session storage with expiry
+   */
+  private saveDisplayMode() {
+    try {
+      const data: SessionModeData = {
+        mode: this.displayMode,
+        expiresAt: Date.now() + this.MODE_EXPIRY_MS,
+      };
+      sessionStorage.setItem(this.SESSION_STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.warn('Failed to save to session storage:', error);
+    }
   }
 
   private initializeContainer() {
@@ -62,10 +122,64 @@ class BackgroundNumbersManager {
     this.container.style.overflow = 'hidden';
   }
 
+  /**
+   * Get display text based on current display mode and track
+   */
+  private getDisplayText(): string {
+    if (!this.currentTrack) {
+      return this.currentTrackIndex.toString();
+    }
+
+    switch (this.displayMode) {
+      case DisplayMode.TITLE:
+        // If no cover, show "MESSLINES"; otherwise show title
+        const hasCover = this.currentTrack.cover || this.currentTrack.coverKey;
+        if (!hasCover) {
+          return 'MESSLINES';
+        }
+        return this.currentTrack.title || this.currentTrack.name || this.currentTrackIndex.toString();
+      case DisplayMode.INDEX:
+      default:
+        return this.currentTrackIndex.toString();
+    }
+  }
+
+  /**
+   * Update display characters array by splitting text into individual characters
+   */
+  private updateDisplayCharacters() {
+    const text = this.getDisplayText();
+    // Convert to uppercase, split into characters, and filter out spaces
+    this.displayCharacters = text.toUpperCase().split('').filter(char => char !== ' ');
+  }
+
+  /**
+   * Get a character for a specific grid position
+   * Cycles through the displayCharacters array sequentially
+   */
+  private getCharacterForPosition(positionIndex: number): string {
+    if (this.displayCharacters.length === 0) {
+      return '0';
+    }
+    // Cycle through characters sequentially
+    return this.displayCharacters[positionIndex % this.displayCharacters.length];
+  }
+
+  /**
+   * Get font family based on current display mode
+   */
+  private getFontFamily(): string {
+    // Use Chivo Mono for both numbers and titles
+    return '"Chivo Mono", "Courier New", "Consolas", "Monaco", monospace';
+  }
+
   private generateInitialGrid() {
     if (!this.container) return;
 
     const { width, height } = this.getViewportDimensions();
+
+    // Update display characters before generating grid
+    this.updateDisplayCharacters();
 
     // Clear existing elements
     this.container.innerHTML = '';
@@ -92,6 +206,7 @@ class BackgroundNumbersManager {
     }
 
     let positionIndex = 0;
+    let characterIndex = 0; // Track which character to show next
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * this.SPACING;
@@ -99,13 +214,16 @@ class BackgroundNumbersManager {
         const zeroKey = `${row}-${col}`;
         const isEmpty = emptyPositions.has(positionIndex);
 
-        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty);
+        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty, characterIndex);
         positionIndex++;
+        if (!isEmpty) {
+          characterIndex++; // Only increment for non-empty positions
+        }
       }
     }
   }
 
-  private createZeroElement(key: string, x: number, y: number, startY: number, endY: number, isEmpty: boolean = false) {
+  private createZeroElement(key: string, x: number, y: number, startY: number, endY: number, isEmpty: boolean = false, characterIndex: number = 0) {
     if (!this.container) return;
 
     const element = document.createElement('div');
@@ -125,7 +243,7 @@ class BackgroundNumbersManager {
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
     element.style.fontSize = `${this.FONT_SIZE}px`;
-    element.style.fontFamily = '"Arial Black", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    element.style.fontFamily = this.getFontFamily();
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
@@ -134,10 +252,10 @@ class BackgroundNumbersManager {
 
     this.updateElementStyle(element, isOutline, zeroColor, 0);
 
-    // If not an empty position, display current track index
+    // If not an empty position, display character for this position
     if (!isEmpty) {
-      const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
-      element.textContent = displayNumber;
+      const displayChar = this.getCharacterForPosition(characterIndex);
+      element.textContent = displayChar;
     } else {
       element.textContent = ''; // Empty positions show no content
     }
@@ -344,14 +462,15 @@ class BackgroundNumbersManager {
     }
 
     // Execute the switches
-    emptyKeysToFill.forEach(key => {
+    emptyKeysToFill.forEach((key, index) => {
       const zeroState = this.zeroGrid[key];
       if (!zeroState) return;
 
       zeroState.isEmpty = false;
-      // Set to display number
-      const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
-      zeroState.element.textContent = displayNumber;
+      // Set to display character at random position
+      const randomCharIndex = Math.floor(Math.random() * this.displayCharacters.length);
+      const displayChar = this.getCharacterForPosition(randomCharIndex);
+      zeroState.element.textContent = displayChar;
       this.updateZeroDisplay(key);
     });
 
@@ -416,10 +535,38 @@ class BackgroundNumbersManager {
     }
   }
 
+  // Public method: set display mode (index or title)
+  public setDisplayMode(mode: 'index' | 'title') {
+    const newMode = mode === 'index' ? DisplayMode.INDEX : DisplayMode.TITLE;
+
+    if (this.displayMode !== newMode) {
+      this.displayMode = newMode;
+      // Save to session storage
+      this.saveDisplayMode();
+      // Update display characters and refresh all content with new mode
+      this.updateDisplayCharacters();
+      this.updateAllZerosContent();
+    }
+  }
+
+  // Public method: get current display mode
+  public getDisplayMode(): 'index' | 'title' {
+    switch (this.displayMode) {
+      case DisplayMode.INDEX:
+        return 'index';
+      case DisplayMode.TITLE:
+        return 'title';
+      default:
+        return 'title';
+    }
+  }
+
   // Animate track switch with 3D cube flip effect
   private animateTrackSwitch(direction: 'next' | 'prev') {
     const allKeys = Object.keys(this.zeroGrid);
-    const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
+
+    // Update display characters for new track
+    this.updateDisplayCharacters();
 
     // Regenerate empty positions randomly
     const totalPositions = allKeys.length;
@@ -433,6 +580,7 @@ class BackgroundNumbersManager {
     }
 
     // Animate each number box with random staggered timing
+    let characterIndex = 0;
     allKeys.forEach((key, index) => {
       const zeroState = this.zeroGrid[key];
       if (!zeroState) return;
@@ -444,7 +592,10 @@ class BackgroundNumbersManager {
       const randomDelay = Math.random() * 400;
 
       setTimeout(() => {
-        this.flipNumberBox(element, zeroState, displayNumber, direction, willBeEmpty, key);
+        this.flipNumberBox(element, zeroState, characterIndex, direction, willBeEmpty, key);
+        if (!willBeEmpty) {
+          characterIndex++;
+        }
       }, randomDelay);
     });
   }
@@ -453,7 +604,7 @@ class BackgroundNumbersManager {
   private flipNumberBox(
     element: HTMLDivElement,
     zeroState: ZeroState,
-    newNumber: string,
+    characterIndex: number,
     direction: 'next' | 'prev',
     willBeEmpty: boolean,
     key: string
@@ -488,7 +639,8 @@ class BackgroundNumbersManager {
       if (willBeEmpty) {
         element.textContent = '';
       } else {
-        element.textContent = newNumber;
+        const newChar = this.getCharacterForPosition(characterIndex);
+        element.textContent = newChar;
       }
 
       // Randomly change style for variety
@@ -740,11 +892,18 @@ class BackgroundNumbersManager {
   }
 
   private updateAllZerosContent() {
-    const displayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
-    Object.values(this.zeroGrid).forEach(zeroState => {
+    this.updateDisplayCharacters();
+    let characterIndex = 0;
+
+    Object.keys(this.zeroGrid).forEach(key => {
+      const zeroState = this.zeroGrid[key];
       // Only update content for non-empty positions
       if (!zeroState.isEmpty) {
-        zeroState.element.textContent = displayNumber;
+        const displayChar = this.getCharacterForPosition(characterIndex);
+        zeroState.element.textContent = displayChar;
+        // Update font family for mode changes
+        zeroState.element.style.fontFamily = this.getFontFamily();
+        characterIndex++;
       }
     });
   }
@@ -809,15 +968,15 @@ class BackgroundNumbersManager {
 
   // Helper method: create element with specified state
   private createZeroElementWithState(
-    key: string, 
-    x: number, 
-    y: number, 
-    startY: number, 
-    endY: number, 
-    isEmpty: boolean, 
-    isOutline: boolean, 
-    opacity: number, 
-    displayNumber: string
+    key: string,
+    x: number,
+    y: number,
+    startY: number,
+    endY: number,
+    isEmpty: boolean,
+    isOutline: boolean,
+    opacity: number,
+    characterIndex: number
   ) {
     if (!this.container) return;
 
@@ -834,7 +993,7 @@ class BackgroundNumbersManager {
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
     element.style.fontSize = `${this.FONT_SIZE}px`;
-    element.style.fontFamily = '"Arial Black", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    element.style.fontFamily = this.getFontFamily();
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
@@ -845,7 +1004,8 @@ class BackgroundNumbersManager {
 
     // Set content
     if (!isEmpty) {
-      element.textContent = displayNumber;
+      const displayChar = this.getCharacterForPosition(characterIndex);
+      element.textContent = displayChar;
     } else {
       element.textContent = '';
     }
@@ -867,7 +1027,9 @@ class BackgroundNumbersManager {
     // Preserve current state
     const previousStates = this.preserveCurrentStates();
     const wasVisible = this.numbersVisible;
-    const currentDisplayNumber = this.currentTrack ? this.currentTrackIndex.toString() : '0';
+
+    // Update display characters
+    this.updateDisplayCharacters();
 
     // Get new viewport dimensions
     const { width, height } = this.getViewportDimensions();
@@ -896,6 +1058,7 @@ class BackgroundNumbersManager {
 
     // Regenerate grid while preserving existing states as much as possible
     let positionIndex = 0;
+    let characterIndex = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * this.SPACING;
@@ -908,8 +1071,11 @@ class BackgroundNumbersManager {
         const isOutline = previousState?.isOutline ?? Math.random() < 0.5;
         const opacity = previousState?.opacity ?? 0.25;
 
-        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, currentDisplayNumber);
+        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, characterIndex);
         positionIndex++;
+        if (!isEmpty) {
+          characterIndex++;
+        }
       }
     }
 
