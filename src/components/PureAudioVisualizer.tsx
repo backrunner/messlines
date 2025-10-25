@@ -129,10 +129,14 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
         position: 'fixed',
         top: 0,
         left: 0,
-        width: '100%',
-        height: '100%',
+        width: '100vw',
+        height: '100vh',
+        // Use dynamic viewport height for mobile browsers
+        // @ts-ignore - CSS custom property
+        height: '100dvh',
         background: 'linear-gradient(to top, #0a0a0a 40%, #000000)', // Initial background, will be updated by animation
         overflow: 'hidden',
+        zIndex: 0,
       }}
     >
       {/* Background numbers container */}

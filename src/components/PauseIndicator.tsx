@@ -15,12 +15,12 @@ const PauseIndicator = ({ playState }: PauseIndicatorProps) => {
       aria-label={isPaused ? '音乐已暂停' : ''}
     >
       <Icon icon="mdi:pause" width="24" height="24" />
-      
+
       <style>{`
         .pause-indicator {
           position: fixed;
-          top: 2rem;
-          left: 2rem;
+          top: calc(2rem + env(safe-area-inset-top));
+          left: calc(2rem + env(safe-area-inset-left));
           display: flex;
           align-items: center;
           justify-content: center;

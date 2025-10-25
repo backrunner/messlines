@@ -168,6 +168,7 @@ const BottomOverlay = ({ currentTrack }: BottomOverlayProps) => {
           left: 0;
           right: 0;
           padding: 2rem;
+          padding-bottom: calc(2rem + env(safe-area-inset-bottom));
           display: flex;
           justify-content: space-between;
           align-items: flex-end;

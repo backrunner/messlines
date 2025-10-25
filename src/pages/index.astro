@@ -15,8 +15,10 @@ const seo = {
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/png" href="/favicon.png" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
 		<meta name="generator" content={Astro.generator} />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 		<!-- Primary Meta Tags -->
 		<title>{seo.title}</title>
@@ -57,9 +59,31 @@ const seo = {
 				padding: 0;
 				box-sizing: border-box;
 			}
+			html {
+				height: 100%;
+				overflow: hidden;
+				overscroll-behavior: none;
+				-webkit-overflow-scrolling: touch;
+			}
 			body {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				width: 100vw;
+				height: 100vh;
+				height: 100dvh; /* Dynamic viewport height for mobile browsers */
 				background: #000;
 				overflow: hidden;
+				overscroll-behavior: none;
+				-webkit-overflow-scrolling: touch;
+			}
+			/* Prevent pull-to-refresh and overscroll glow effects */
+			html, body {
+				touch-action: none;
+				-webkit-user-select: none;
+				user-select: none;
 			}
 		</style>
 	</head>

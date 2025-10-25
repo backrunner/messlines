@@ -29,8 +29,8 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
       <style>{`
         .play-indicator {
           position: fixed;
-          top: 2rem;
-          right: 2rem;
+          top: calc(2rem + env(safe-area-inset-top));
+          right: calc(2rem + env(safe-area-inset-right));
           display: flex;
           align-items: center;
           justify-content: center;

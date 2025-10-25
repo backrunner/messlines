@@ -125,7 +125,7 @@ class BackgroundNumbersManager {
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
     element.style.fontSize = `${this.FONT_SIZE}px`;
-    element.style.fontFamily = 'Arial Black, sans-serif';
+    element.style.fontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
@@ -834,7 +834,7 @@ class BackgroundNumbersManager {
     element.style.left = `${x}px`;
     element.style.top = `${y}px`;
     element.style.fontSize = `${this.FONT_SIZE}px`;
-    element.style.fontFamily = 'Arial Black, sans-serif';
+    element.style.fontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
     element.style.fontWeight = '900';
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
