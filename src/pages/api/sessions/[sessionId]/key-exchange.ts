@@ -22,7 +22,10 @@ export const POST: APIRoute = async ({ params, request, url }) => {
 
     return new Response(JSON.stringify(response), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      }
     });
   } catch (error: unknown) {
     console.error('❌ Key exchange error:', error);

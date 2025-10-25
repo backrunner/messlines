@@ -22,7 +22,10 @@ export const GET: APIRoute = async ({ params }) => {
 
     return new Response(JSON.stringify(info), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      }
     });
   } catch (error) {
     console.error('❌ Get session info error:', error);

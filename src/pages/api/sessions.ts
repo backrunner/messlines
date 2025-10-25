@@ -94,7 +94,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       console.log('📤 Sending successful response:', response);
       return new Response(JSON.stringify(response), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Connection': 'keep-alive'
+        }
       });
     }
 
@@ -153,7 +156,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     console.log('📤 Sending successful response:', response);
     return new Response(JSON.stringify(response), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      }
     });
   } catch (error: unknown) {
     console.error('❌ Session creation error:', error);

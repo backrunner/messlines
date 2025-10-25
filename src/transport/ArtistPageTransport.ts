@@ -27,8 +27,12 @@ export class ArtistPageTransport implements Transport {
   async createSessionFromTrack(audioKey: string): Promise<string> {
     const response = await fetch(`${this.baseUrl}/api/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      },
       body: JSON.stringify({ audioKey }),
+      keepalive: true,
     });
 
     if (!response.ok) {
@@ -46,8 +50,12 @@ export class ArtistPageTransport implements Transport {
   async createSessionFromTracks(audioKeys: string[]): Promise<string> {
     const response = await fetch(`${this.baseUrl}/api/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      },
       body: JSON.stringify({ audioKeys }),
+      keepalive: true,
     });
 
     if (!response.ok) {
@@ -71,8 +79,12 @@ export class ArtistPageTransport implements Transport {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive'
+      },
       body: JSON.stringify(request),
+      keepalive: true,
     });
 
     if (!response.ok) {
@@ -84,7 +96,10 @@ export class ArtistPageTransport implements Transport {
   }
 
   async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-    const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/info`);
+    const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/info`, {
+      headers: { 'Connection': 'keep-alive' },
+      keepalive: true,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -100,7 +115,10 @@ export class ArtistPageTransport implements Transport {
       ? `${this.baseUrl}/api/sessions/${sessionId}/slices/${sliceId}?trackId=${encodeURIComponent(trackId)}`
       : `${this.baseUrl}/api/sessions/${sessionId}/slices/${sliceId}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { 'Connection': 'keep-alive' },
+      keepalive: true,
+    });
 
     if (!response.ok) {
       const errorText = await response.text();

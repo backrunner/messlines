@@ -32,6 +32,7 @@ export const GET: APIRoute = async ({ params, url }) => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/octet-stream',
       'Cache-Control': 'public, max-age=300',
+      'Connection': 'keep-alive',
       'X-Slice-ID': slice.id,
       'X-Slice-Sequence': slice.sequence.toString(),
       'X-Session-ID': slice.sessionId,
