@@ -34,13 +34,13 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   const audioAnalyzerRef = useRef<PureAudioAnalyzer | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0);
   const [playState, setPlayState] = useState<PlayState>(PlayState.STOPPED);
-  const [shuffledPlaylist, setShuffledPlaylist] = useState<AudioTrack[]>([]);
-  const [volume, setVolume] = useState<number>(AUDIO_CONFIG.volume);
+  const [currentPlaylist, setCurrentPlaylist] = useState<AudioTrack[]>([]);
+  const [isSecStreamReady, setIsSecStreamReady] = useState<boolean>(false);
   const isInitializedRef = useRef(false);
   const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const trackDirectionRef = useRef<'next' | 'prev' | 'none'>('none');
   const pauseFadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const currentVolumeRef = useRef<number>(AUDIO_CONFIG.volume);
+  const volumeRef = useRef<number>(AUDIO_CONFIG.volume);
 
   // Audio reactive callbacks reference
   const audioReactiveCallbacks = useRef({
@@ -48,8 +48,24 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     onBeat: (strength: number) => {},
   });
 
+  // Initialize playlist order on mount (before SecStream initialization)
+  useEffect(() => {
+    if (AUDIO_PLAYLIST.length === 0) return;
+
+    if (AUDIO_CONFIG.shufflePlay) {
+      const shuffled = shuffleArray(AUDIO_PLAYLIST);
+      setCurrentPlaylist(shuffled);
+    } else {
+      setCurrentPlaylist(AUDIO_PLAYLIST);
+    }
+    setCurrentTrackIndex(0);
+  }, []);
+
   // Initialize SecStream audio analyzer and playlist on component mount
   useEffect(() => {
+    // Wait for playlist to be initialized
+    if (currentPlaylist.length === 0) return;
+
     const initializeSecStream = async () => {
       try {
         secStreamRef.current = new SecStreamService();
@@ -61,7 +77,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
       // Initialize multi-track session with the entire playlist
       try {
-        await secStreamRef.current.initializePlaylist(shuffledPlaylist.length > 0 ? shuffledPlaylist : AUDIO_PLAYLIST);
+        await secStreamRef.current.initializePlaylist(currentPlaylist);
         console.log('✅ Multi-track playlist initialized');
 
         // Initialize audio analyzer for SecStream only
@@ -135,24 +151,30 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
           player.addEventListener('suspended', handleSecStreamSuspended);
           console.log('✅ Event listeners attached to player');
         }
+
+        // Mark SecStream as ready after successful initialization
+        setIsSecStreamReady(true);
+        console.log('✅ SecStream is ready for playback');
       } catch (error) {
         console.error('❌ Failed to initialize SecStream playlist:', error);
+        setIsSecStreamReady(false);
       }
     };
 
     initializeSecStream();
 
     return () => {
-      // Clean up fade interval
+      // Clean up only on unmount
       if (fadeIntervalRef.current) {
         clearInterval(fadeIntervalRef.current);
         fadeIntervalRef.current = null;
       }
-      // Clean up pause fade interval
       if (pauseFadeIntervalRef.current) {
         clearInterval(pauseFadeIntervalRef.current);
         pauseFadeIntervalRef.current = null;
       }
+
+      setIsSecStreamReady(false);
 
       if (secStreamRef.current) {
         secStreamRef.current.destroy();
@@ -163,35 +185,23 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         audioAnalyzerRef.current = null;
       }
     };
-  }, [shuffledPlaylist]);
-
-  useEffect(() => {
-    if (AUDIO_PLAYLIST.length === 0) return;
-
-    if (AUDIO_CONFIG.shufflePlay) {
-      const shuffled = shuffleArray(AUDIO_PLAYLIST);
-      setShuffledPlaylist(shuffled);
-    } else {
-      setShuffledPlaylist(AUDIO_PLAYLIST);
-    }
-    setCurrentTrackIndex(0);
-  }, []);
+  }, [currentPlaylist.length]); // Only re-initialize if playlist length changes (not on shuffle)
 
   const getCurrentTrack = useCallback((): AudioTrack | null => {
-    if (shuffledPlaylist.length === 0) return null;
-    return shuffledPlaylist[currentTrackIndex] || null;
-  }, [shuffledPlaylist, currentTrackIndex]);
+    if (currentPlaylist.length === 0) return null;
+    return currentPlaylist[currentTrackIndex] || null;
+  }, [currentPlaylist, currentTrackIndex]);
 
   const playNext = useCallback(() => {
-    if (shuffledPlaylist.length === 0) return;
+    if (currentPlaylist.length === 0) return;
 
     let nextIndex = currentTrackIndex + 1;
 
-    if (nextIndex >= shuffledPlaylist.length) {
+    if (nextIndex >= currentPlaylist.length) {
       if (AUDIO_CONFIG.loop) {
         // Loop enabled: reshuffle playlist and restart from beginning
         const newShuffled = AUDIO_CONFIG.shufflePlay ? shuffleArray(AUDIO_PLAYLIST) : AUDIO_PLAYLIST;
-        setShuffledPlaylist(newShuffled);
+        setCurrentPlaylist(newShuffled);
         nextIndex = 0;
         console.log('🔁 Playlist ended, looping and reshuffling...');
       } else {
@@ -207,25 +217,34 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     console.log(`⏭️ Transitioning to next track: ${nextIndex}`);
     trackDirectionRef.current = 'next';
     setCurrentTrackIndex(nextIndex);
-  }, [shuffledPlaylist, currentTrackIndex, onPlayStateChange]);
+  }, [currentPlaylist, currentTrackIndex, onPlayStateChange]);
 
   const playPrev = useCallback(() => {
-    if (shuffledPlaylist.length === 0) return;
+    if (currentPlaylist.length === 0) return;
 
     let prevIndex = currentTrackIndex - 1;
 
     if (prevIndex < 0) {
-      prevIndex = shuffledPlaylist.length - 1;
+      prevIndex = currentPlaylist.length - 1;
     }
 
     trackDirectionRef.current = 'prev';
     setCurrentTrackIndex(prevIndex);
-  }, [shuffledPlaylist, currentTrackIndex]);
+  }, [currentPlaylist, currentTrackIndex]);
 
   const playTrack = useCallback(
     async (trackIndex: number, throwOnError: boolean = false) => {
-      const track = shuffledPlaylist[trackIndex];
+      const track = currentPlaylist[trackIndex];
       if (!track || !secStreamRef.current) return;
+
+      // Ensure SecStream is fully initialized before attempting playback
+      if (!isSecStreamReady) {
+        console.warn('⚠️ SecStream not ready yet, waiting for initialization...');
+        if (throwOnError) {
+          throw new Error('SecStream not ready for playback');
+        }
+        return;
+      }
 
       try {
         setPlayState(PlayState.LOADING);
@@ -235,7 +254,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         // Switch to the track in the multi-track session
         await secStreamRef.current.switchToTrack(trackIndex, false);
 
-        secStreamRef.current.setVolume(volume);
+        secStreamRef.current.setVolume(volumeRef.current);
 
         console.log('🎵 About to call secStreamRef.current.play()');
         try {
@@ -257,7 +276,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
             fadeIntervalRef.current = setInterval(() => {
               step++;
-              const newVolume = volume * (step / fadeSteps);
+              const newVolume = volumeRef.current * (step / fadeSteps);
               secStreamRef.current?.setVolume(newVolume);
 
               if (step >= fadeSteps) {
@@ -265,11 +284,11 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
                   clearInterval(fadeIntervalRef.current);
                   fadeIntervalRef.current = null;
                 }
-                secStreamRef.current?.setVolume(volume); // Ensure final volume is set
+                secStreamRef.current?.setVolume(volumeRef.current); // Ensure final volume is set
               }
             }, fadeInterval);
           } else {
-            secStreamRef.current.setVolume(volume);
+            secStreamRef.current.setVolume(volumeRef.current);
           }
         } catch (playError) {
           console.error('❌ Play() threw error in AudioManager:', playError);
@@ -304,18 +323,14 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
       } catch (error) {
         console.error('SecStream playback failed:', error);
 
-        // Check if it's an autoplay policy error
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('AudioContext') || errorMessage.includes('user gesture')) {
-          console.log('⚠️ Autoplay blocked by browser policy');
-          setPlayState(PlayState.STOPPED);
-          onPlayStateChange?.(PlayState.STOPPED);
-          onAudioContextSuspended?.(true);
-        }
+        // During initial autoplay attempt, any error should trigger PlayIndicator
+        // This handles both explicit autoplay blocks and initialization failures
+        console.log('⚠️ Playback failed - setting AudioContext to suspended state');
+        setPlayState(PlayState.STOPPED);
+        onPlayStateChange?.(PlayState.STOPPED);
+        onAudioContextSuspended?.(true);
 
         if (throwOnError) {
-          setPlayState(PlayState.STOPPED);
-          onPlayStateChange?.(PlayState.STOPPED);
           throw error;
         } else {
           setPlayState(PlayState.ERROR);
@@ -323,7 +338,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         }
       }
     },
-    [shuffledPlaylist, volume, onTrackChange, onPlayStateChange, onAudioContextSuspended]
+    [currentPlaylist, onTrackChange, onPlayStateChange, onAudioContextSuspended, isSecStreamReady]
   );
 
   const stop = useCallback(() => {
@@ -359,7 +374,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
     const fadeSteps = 15;
     const fadeInterval = duration / fadeSteps;
-    const startVolume = currentVolumeRef.current;
+    const startVolume = volumeRef.current;
     let step = 0;
 
     pauseFadeIntervalRef.current = setInterval(() => {
@@ -427,7 +442,7 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     secStreamRef.current.play();
     setPlayState(PlayState.PLAYING);
     onPlayStateChange?.(PlayState.PLAYING);
-    fadeInVolume(currentVolumeRef.current);
+    fadeInVolume(volumeRef.current);
   }, [fadeInVolume, onPlayStateChange]);
 
   // Track the last played index to prevent re-playing the same track
@@ -435,13 +450,13 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
 
   // Auto-play track when currentTrackIndex changes
   useEffect(() => {
-    if (shuffledPlaylist.length > 0 &&
+    if (currentPlaylist.length > 0 &&
         (playState === PlayState.PLAYING || playState === PlayState.LOADING) &&
         currentTrackIndex !== lastPlayedIndexRef.current) {
       lastPlayedIndexRef.current = currentTrackIndex;
       playTrack(currentTrackIndex);
     }
-  }, [currentTrackIndex, shuffledPlaylist.length, playState]);
+  }, [currentTrackIndex, currentPlaylist.length, playState]);
 
   const togglePlayPause = useCallback(() => {
     if (!secStreamRef.current) return;
@@ -475,25 +490,30 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
   }, [playState, onPlayStateChange, playTrack, currentTrackIndex, onAudioContextSuspended, pauseWithFade, resumeWithFade]);
 
   useEffect(() => {
-    if (AUDIO_CONFIG.autoPlay && shuffledPlaylist.length > 0 && !isInitializedRef.current && playState === PlayState.STOPPED) {
+    if (AUDIO_CONFIG.autoPlay &&
+        currentPlaylist.length > 0 &&
+        !isInitializedRef.current &&
+        isSecStreamReady &&
+        playState === PlayState.STOPPED) {
       isInitializedRef.current = true;
       lastPlayedIndexRef.current = 0; // Mark track 0 as being played to prevent duplicate
 
       setTimeout(async () => {
         try {
+          console.log('🎵 Attempting autoplay...');
           await playTrack(0, true);
           console.log('✅ Autoplay started successfully');
         } catch (error) {
           console.log('⚠️ Autoplay blocked by browser (expected behavior):', error);
-          // AudioContext suspension will be detected and onAudioContextSuspended will be called
-          // The PlayIndicator will be shown to prompt user interaction
+          // Ensure PlayIndicator is shown when autoplay fails
           setPlayState(PlayState.STOPPED);
           onPlayStateChange?.(PlayState.STOPPED);
+          onAudioContextSuspended?.(true);
           // Don't rethrow - this is expected behavior for autoplay
         }
       }, 3000);
     }
-  }, [shuffledPlaylist, playState, playTrack, onPlayStateChange]);
+  }, [currentPlaylist, playState, playTrack, onPlayStateChange, onAudioContextSuspended, isSecStreamReady]);
 
   const controls = useMemo<AudioControls>(
     () => ({
@@ -517,11 +537,6 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
     }
   }, [playState]);
 
-  // Keep currentVolumeRef in sync with volume state
-  useEffect(() => {
-    currentVolumeRef.current = volume;
-  }, [volume]);
-
   // Expose SecStream audio reactive callbacks globally for visualizations
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -539,17 +554,17 @@ const AudioManager = ({ onTrackChange, onPlayStateChange, onControlsReady, onSec
         togglePlayPause,
         getCurrentTrack,
         getPlayState: () => playState,
-        getPlaylist: () => shuffledPlaylist,
+        getPlaylist: () => currentPlaylist,
         getSecStreamService: () => secStreamRef.current,
         setVolume: (vol: number) => {
-          setVolume(vol);
+          volumeRef.current = vol;
           if (secStreamRef.current) {
             secStreamRef.current.setVolume(vol);
           }
         },
       };
     }
-  }, [playTrack, currentTrackIndex, stop, playNext, playPrev, togglePlayPause, getCurrentTrack, playState, shuffledPlaylist]);
+  }, [playTrack, currentTrackIndex, stop, playNext, playPrev, togglePlayPause, getCurrentTrack, playState, currentPlaylist]);
 
   return null;
 };

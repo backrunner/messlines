@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import type { ProcessorKeyExchangeRequest } from 'secstream';
+import type { ProcessorKeyExchangeRequest } from 'secstream/server';
 import { sessionManager } from '../../sessions';
 
 export const POST: APIRoute = async ({ params, request, url }) => {

@@ -36,17 +36,28 @@ export class SecStreamService {
 
   private initialize(): void {
     try {
+      // Ensure we're in a browser environment
+      if (typeof window === 'undefined') {
+        throw new Error('SecStreamService can only be initialized in browser environment');
+      }
+
       this.transport = new ArtistPageTransport(window.location.origin);
 
-      // Get worker URL using Vite's worker import pattern
+      // Get worker URL from secstream package
       let workerUrl: string | undefined;
-      if (SECSTREAM_CONFIG.workerConfig?.enabled) {
+      if (SECSTREAM_CONFIG.workerConfig?.enabled && typeof Worker !== 'undefined') {
         try {
+          // Use the worker from secstream package
           workerUrl = new URL('secstream/client/worker', import.meta.url).href;
           console.log('🔧 Worker URL:', workerUrl);
         } catch (error) {
           console.warn('⚠️ Failed to load worker URL:', error);
+          // Disable workers if URL loading fails
+          SECSTREAM_CONFIG.workerConfig.enabled = false;
         }
+      } else if (SECSTREAM_CONFIG.workerConfig?.enabled) {
+        console.warn('⚠️ Worker API not available, disabling workers');
+        SECSTREAM_CONFIG.workerConfig.enabled = false;
       }
 
       this.client = new SecureAudioClient(this.transport, {

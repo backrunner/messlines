@@ -1,4 +1,4 @@
-import type { CompressionLevel } from 'secstream';
+import type { CompressionLevel } from 'secstream/server';
 
 export interface AudioTrack {
   id: number;

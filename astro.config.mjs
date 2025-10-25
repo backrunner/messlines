@@ -16,7 +16,7 @@ export default defineConfig({
       format: 'es', // Use ES modules for workers
     },
     optimizeDeps: {
-      // Exclude secstream and jsquash from pre-bundling to preserve worker imports
+      // Exclude from pre-bundling to preserve worker imports
       exclude: ['secstream', '@jsquash/webp', '@jsquash/avif', '@jsquash/png', '@jsquash/jpeg'],
     },
   },
