@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { getSessionDO } from '../../../../utils/durable-objects.js';
+import { sessionCache } from '../../../../utils/session-cache.js';
 
 export const GET: APIRoute = async ({ params, locals }) => {
   try {
@@ -9,6 +10,14 @@ export const GET: APIRoute = async ({ params, locals }) => {
         status: 400,
         headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
+    }
+
+    // Check worker memory cache first for session validation
+    const cachedSession = sessionCache.get(sessionId);
+    if (!cachedSession) {
+      console.log(`⚠️ Worker cache MISS for session ${sessionId}, will access DO`);
+    } else {
+      console.log(`✅ Worker cache HIT for session ${sessionId}, verified session exists`);
     }
 
     // Get Durable Objects namespace
@@ -29,6 +38,12 @@ export const GET: APIRoute = async ({ params, locals }) => {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
+    }
+
+    // Update cache TTL after successful info fetch (session is still active)
+    if (cachedSession) {
+      sessionCache.set(sessionId, cachedSession);
+      console.log(`🔄 Refreshed cache TTL for session ${sessionId}`);
     }
 
     return new Response(JSON.stringify(info), {

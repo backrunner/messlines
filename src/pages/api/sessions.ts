@@ -1,9 +1,7 @@
 import type { APIRoute } from 'astro';
-import { AudioFileHandler } from '../../utils/secstream.js';
 import { createSessionDO } from '../../utils/durable-objects.js';
 import { validateAudioKeys } from '../../utils/playlist-validator.js';
-
-const audioHandler = new AudioFileHandler();
+import { sessionCache } from '../../utils/session-cache.js';
 
 // Rate limiting configuration
 const MAX_SESSIONS_PER_WINDOW = 10;
@@ -116,6 +114,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const sessionId = await sessionDO.createSession(doId, keysToLoad);
 
     console.log(`✅ Session created successfully. Client session ID: ${sessionId}`);
+
+    // Cache session metadata in worker memory to reduce future DO requests
+    sessionCache.set(sessionId, {
+      doId,
+      sessionId,
+      audioKeys: keysToLoad,
+      createdAt: Date.now(),
+      cachedAt: Date.now(),
+    });
+    console.log(`💾 Cached session ${sessionId} in worker memory`);
 
     const response = {
       sessionId,
