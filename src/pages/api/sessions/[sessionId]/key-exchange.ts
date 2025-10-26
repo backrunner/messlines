@@ -1,14 +1,23 @@
 import type { APIRoute } from 'astro';
 import type { ProcessorKeyExchangeRequest } from 'secstream/server';
-import { sessionManager } from '../../sessions';
+import { getSessionDO } from '../../../../utils/durable-objects.js';
 
-export const POST: APIRoute = async ({ params, request, url }) => {
+export const POST: APIRoute = async ({ params, request, url, locals }) => {
   try {
     const sessionId = params.sessionId;
     if (!sessionId) {
       return new Response(JSON.stringify({ error: 'Session ID is required' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+      });
+    }
+
+    // Get Durable Objects namespace
+    const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
+    if (!sessionsDO) {
+      return new Response(JSON.stringify({ error: 'Session storage not available' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
     }
 
@@ -17,8 +26,12 @@ export const POST: APIRoute = async ({ params, request, url }) => {
 
     const keyExchangeRequest = await request.json() as ProcessorKeyExchangeRequest<unknown>;
 
-    console.log(`🔑 Key exchange for session: ${sessionId}${trackId ? ` (track: ${trackId})` : ''}`);
-    const response = await sessionManager.handleKeyExchange(sessionId, keyExchangeRequest, trackId);
+    // Get the Durable Object for this session
+    // sessionId is actually the DO ID (used for routing)
+    const sessionDO = getSessionDO(sessionsDO, sessionId);
+
+    console.log(`🔑 Key exchange for DO: ${sessionId}${trackId ? ` (track: ${trackId})` : ''}`);
+    const response = await sessionDO.handleKeyExchange(sessionId, keyExchangeRequest, trackId);
 
     return new Response(JSON.stringify(response), {
       status: 200,
@@ -29,9 +42,12 @@ export const POST: APIRoute = async ({ params, request, url }) => {
     });
   } catch (error: unknown) {
     console.error('❌ Key exchange error:', error);
-    return new Response(JSON.stringify({ error: 'Key exchange failed' }), {
+    return new Response(JSON.stringify({
+      error: 'Key exchange failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
     });
   }
 };

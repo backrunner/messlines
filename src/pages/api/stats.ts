@@ -1,15 +1,13 @@
 import type { APIRoute } from 'astro';
-import { sessionManager } from './sessions.js';
 
 export const GET: APIRoute = async () => {
   try {
-    const stats = sessionManager.getStats();
-
     const response = {
       server: 'astro-cloudflare',
       framework: 'secstream',
+      sessionStorage: 'durable-objects',
       timestamp: new Date().toISOString(),
-      ...stats,
+      status: 'operational',
     };
 
     return new Response(JSON.stringify(response), {

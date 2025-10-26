@@ -116,7 +116,9 @@ export class SecStreamService {
       // Step 4: Create player with the client (session is already initialized)
       this.player = new SecureAudioPlayer(this.client, {
         bufferStrategy: new AggressiveBufferStrategy(),
-        prefetchStrategy: new LinearPrefetchStrategy(),
+        prefetchStrategy: new LinearPrefetchStrategy({
+          minPrefetchAhead: 3,
+        }),
         smartPrefetchNextTrack: true, // Enable smart prefetching of next track
         nextTrackPrefetchThreshold: 10, // Start prefetching 10 seconds before end
       });

@@ -123,6 +123,8 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
     };
   }, []);
 
+  const isSafari = typeof window !== 'undefined' && /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+
   return (
     <div
       style={{
@@ -130,10 +132,7 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
         top: 0,
         left: 0,
         width: '100vw',
-        height: '100vh',
-        // Use dynamic viewport height for mobile browsers
-        // @ts-ignore - CSS custom property
-        height: '100dvh',
+        height: isSafari ? '100dvh' : '100vh',
         background: 'linear-gradient(to top, #0a0a0a 40%, #000000)', // Initial background, will be updated by animation
         overflow: 'hidden',
         zIndex: 0,

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { sessionManager } from '../../../sessions';
+import { getSessionDO } from '../../../../../utils/durable-objects.js';
 
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, url, locals }) => {
   try {
     const sessionId = params.sessionId;
     const sliceId = params.sliceId;
@@ -10,16 +10,27 @@ export const GET: APIRoute = async ({ params, url }) => {
     if (!sessionId || !sliceId) {
       return new Response(JSON.stringify({ error: 'Session ID and Slice ID are required' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
     }
 
-    const slice = await sessionManager.getSlice(sessionId, sliceId, trackId);
+    // Get Durable Objects namespace
+    const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
+    if (!sessionsDO) {
+      return new Response(JSON.stringify({ error: 'Session storage not available' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+      });
+    }
+
+    // Get the Durable Object for this session
+    const sessionDO = getSessionDO(sessionsDO, sessionId);
+    const slice = await sessionDO.getSlice(sessionId, sliceId, trackId);
 
     if (!slice) {
       return new Response(JSON.stringify({ error: 'Slice not found' }), {
         status: 404,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
     }
 
@@ -54,9 +65,12 @@ export const GET: APIRoute = async ({ params, url }) => {
     return response;
   } catch (error) {
     console.error('❌ Get slice error:', error);
-    return new Response(JSON.stringify({ error: 'Failed to get slice' }), {
+    return new Response(JSON.stringify({
+      error: 'Failed to get slice',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
     });
   }
 };

@@ -71,13 +71,17 @@ const seo = {
 				left: 0;
 				right: 0;
 				bottom: 0;
-				width: 100vw;
+				width: 100%;
+				/* Use lvh (large viewport height) to fill under iOS Safari toolbars */
 				height: 100vh;
-				height: 100dvh; /* Dynamic viewport height for mobile browsers */
+				height: 100lvh;
 				background: #000;
 				overflow: hidden;
 				overscroll-behavior: none;
 				-webkit-overflow-scrolling: touch;
+				/* GPU layer promotion for iOS Safari fixed position bug */
+				transform: translate3d(0, 0, 0);
+				-webkit-backface-visibility: hidden;
 			}
 			/* Prevent pull-to-refresh and overscroll glow effects */
 			html, body {

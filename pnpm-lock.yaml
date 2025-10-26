@@ -48,8 +48,8 @@ importers:
         specifier: ^19.2.0
         version: 19.2.0(react@19.2.0)
       secstream:
-        specifier: ^0.1.5
-        version: 0.1.5
+        specifier: ^0.1.6
+        version: 0.1.6
     devDependencies:
       wrangler:
         specifier: ^4.45.0
@@ -1833,8 +1833,8 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
-  secstream@0.1.5:
-    resolution: {integrity: sha512-dVmmgfyieGO/42yFSWAEXB1J0uNb3hCs1AGULyL9FkEtce1/AMBl6zB0RTYL+vX+3HUD90TKV+q8Andx6qUGYw==}
+  secstream@0.1.6:
+    resolution: {integrity: sha512-iDGTtWnfcM6KDG0slwt50/u0ey40gtJxzqupSO3Op2ZzYoFPfOCoXbkH4dffaODfeEHsoXdrYTqkRYX7HyuUJQ==}
     engines: {node: '>=18', pnpm: '>=10.0.0'}
 
   semver@6.3.1:
@@ -4202,7 +4202,7 @@ snapshots:
 
   scheduler@0.27.0: {}
 
-  secstream@0.1.5:
+  secstream@0.1.6:
     dependencies:
       fflate: 0.8.2
       nanoid: 5.1.6
