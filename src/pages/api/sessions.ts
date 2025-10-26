@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { AudioFileHandler } from '../../utils/secstream.js';
 import { createSessionDO } from '../../utils/durable-objects.js';
+import { validateAudioKeys } from '../../utils/playlist-validator.js';
 
 const audioHandler = new AudioFileHandler();
 
@@ -19,6 +20,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
         headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
     }
+
+    // Prepare audio keys array for validation
+    const keysToLoad = audioKeys && audioKeys.length > 0 ? audioKeys : [audioKey!];
+
+    // SECURITY: Validate that all requested audio keys are in the allowed AUDIO_PLAYLIST
+    const validation = validateAudioKeys(keysToLoad);
+    if (!validation.valid) {
+      console.error(`❌ Unauthorized audio keys requested: ${validation.invalidKeys.join(', ')}`);
+      return new Response(JSON.stringify({
+        error: 'Audio file not found',
+        message: 'One or more requested audio files are not available'
+      }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+      });
+    }
+
+    console.log(`✅ Validated audio keys: ${keysToLoad.join(', ')}`);
 
     // Get R2 bucket and Durable Objects namespace from Cloudflare environment
     const bucket = locals.runtime.env.AUDIO_BUCKET;
@@ -44,10 +63,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const cache = locals.runtime.caches.default;
     const ctx = locals.runtime.ctx;
 
-    // Prepare audio keys array
-    const keysToLoad = audioKeys && audioKeys.length > 0 ? audioKeys : [audioKey!];
-
-    // Load all audio files
+    // Load all audio files (keysToLoad already validated above)
     const audioBuffers: ArrayBuffer[] = [];
     for (const key of keysToLoad) {
       console.log(`📦 Retrieving audio file: ${key}`);
