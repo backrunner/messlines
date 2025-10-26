@@ -155,14 +155,25 @@ class BackgroundNumbersManager {
 
   /**
    * Get a character for a specific grid position
-   * Cycles through the displayCharacters array sequentially
+   * For text row: displays characters in sequence
+   * For other rows: displays random characters from the text
    */
-  private getCharacterForPosition(positionIndex: number): string {
+  private getCharacterForPosition(row: number, col: number, textStartRow: number, textStartCol: number): string {
     if (this.displayCharacters.length === 0) {
       return '0';
     }
-    // Cycle through characters sequentially
-    return this.displayCharacters[positionIndex % this.displayCharacters.length];
+
+    // Check if this position is in the text display row
+    if (row === textStartRow) {
+      const textIndex = col - textStartCol;
+      // If within the text range, show the character in sequence
+      if (textIndex >= 0 && textIndex < this.displayCharacters.length) {
+        return this.displayCharacters[textIndex];
+      }
+    }
+
+    // For all other positions, show random characters from the display text
+    return this.displayCharacters[Math.floor(Math.random() * this.displayCharacters.length)];
   }
 
   /**
@@ -194,11 +205,17 @@ class BackgroundNumbersManager {
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
 
+    // Calculate center row for text display
+    const textStartRow = Math.floor(rows / 2);
+
+    // Calculate starting column to center the text horizontally
+    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
     // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
     const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
 
-    // Generate random empty position indices
+    // Generate random empty position indices (can be anywhere, including main text)
     const emptyPositions = new Set<number>();
     while (emptyPositions.size < emptyPositionsCount) {
       const randomIndex = Math.floor(Math.random() * totalPositions);
@@ -206,7 +223,6 @@ class BackgroundNumbersManager {
     }
 
     let positionIndex = 0;
-    let characterIndex = 0; // Track which character to show next
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * this.SPACING;
@@ -214,16 +230,24 @@ class BackgroundNumbersManager {
         const zeroKey = `${row}-${col}`;
         const isEmpty = emptyPositions.has(positionIndex);
 
-        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty, characterIndex);
+        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty, row, col, textStartRow, textStartCol);
         positionIndex++;
-        if (!isEmpty) {
-          characterIndex++; // Only increment for non-empty positions
-        }
       }
     }
   }
 
-  private createZeroElement(key: string, x: number, y: number, startY: number, endY: number, isEmpty: boolean = false, characterIndex: number = 0) {
+  private createZeroElement(
+    key: string,
+    x: number,
+    y: number,
+    startY: number,
+    endY: number,
+    isEmpty: boolean = false,
+    row: number = 0,
+    col: number = 0,
+    textStartRow: number = 0,
+    textStartCol: number = 0
+  ) {
     if (!this.container) return;
 
     const element = document.createElement('div');
@@ -234,9 +258,12 @@ class BackgroundNumbersManager {
     const hexGray = grayValue.toString(16).padStart(2, '0');
     const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
 
-    // Initial state
-    const isOutline = Math.random() < 0.5;
-    const opacity = 0.25; // Set initial opacity to a moderate value
+    // Check if this is part of the main text display
+    const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+
+    // Initial state - main text characters are more visible
+    const isOutline = isMainText ? false : Math.random() < 0.5;
+    const opacity = isMainText ? 0.5 : 0.25; // Main text starts more visible
 
     // Set styles
     element.style.position = 'absolute';
@@ -254,7 +281,7 @@ class BackgroundNumbersManager {
 
     // If not an empty position, display character for this position
     if (!isEmpty) {
-      const displayChar = this.getCharacterForPosition(characterIndex);
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
       element.textContent = displayChar;
     } else {
       element.textContent = ''; // Empty positions show no content
@@ -433,6 +460,15 @@ class BackgroundNumbersManager {
     const allKeys = Object.keys(this.zeroGrid);
     if (allKeys.length === 0) return;
 
+    // Calculate text position for proper character assignment
+    const { width, height } = this.getViewportDimensions();
+    const startX = -this.OVERFLOW;
+    const endX = width + this.OVERFLOW;
+    const cols = Math.ceil((endX - startX) / this.SPACING);
+    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
+    const textStartRow = Math.floor(rows / 2);
+    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
     const totalPositions = allKeys.length;
     const targetEmptyCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
     const currentEmptyKeys = allKeys.filter(key => this.zeroGrid[key].isEmpty);
@@ -462,14 +498,17 @@ class BackgroundNumbersManager {
     }
 
     // Execute the switches
-    emptyKeysToFill.forEach((key, index) => {
+    emptyKeysToFill.forEach((key) => {
       const zeroState = this.zeroGrid[key];
       if (!zeroState) return;
 
+      const [rowStr, colStr] = key.split('-');
+      const row = parseInt(rowStr);
+      const col = parseInt(colStr);
+
       zeroState.isEmpty = false;
-      // Set to display character at random position
-      const randomCharIndex = Math.floor(Math.random() * this.displayCharacters.length);
-      const displayChar = this.getCharacterForPosition(randomCharIndex);
+      // Get proper character for this position
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
       zeroState.element.textContent = displayChar;
       this.updateZeroDisplay(key);
     });
@@ -568,22 +607,34 @@ class BackgroundNumbersManager {
     // Update display characters for new track
     this.updateDisplayCharacters();
 
+    // Calculate text position
+    const { width, height } = this.getViewportDimensions();
+    const startX = -this.OVERFLOW;
+    const endX = width + this.OVERFLOW;
+    const cols = Math.ceil((endX - startX) / this.SPACING);
+    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
+    const textStartRow = Math.floor(rows / 2);
+    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
     // Regenerate empty positions randomly
     const totalPositions = allKeys.length;
     const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
     const newEmptyPositions = new Set<string>();
 
-    // Randomly select new empty positions
+    // Randomly select new empty positions (can be anywhere, including main text)
     while (newEmptyPositions.size < emptyPositionsCount) {
       const randomKey = allKeys[Math.floor(Math.random() * allKeys.length)];
       newEmptyPositions.add(randomKey);
     }
 
     // Animate each number box with random staggered timing
-    let characterIndex = 0;
-    allKeys.forEach((key, index) => {
+    allKeys.forEach((key) => {
       const zeroState = this.zeroGrid[key];
       if (!zeroState) return;
+
+      const [rowStr, colStr] = key.split('-');
+      const row = parseInt(rowStr);
+      const col = parseInt(colStr);
 
       const element = zeroState.element;
       const willBeEmpty = newEmptyPositions.has(key);
@@ -592,10 +643,7 @@ class BackgroundNumbersManager {
       const randomDelay = Math.random() * 400;
 
       setTimeout(() => {
-        this.flipNumberBox(element, zeroState, characterIndex, direction, willBeEmpty, key);
-        if (!willBeEmpty) {
-          characterIndex++;
-        }
+        this.flipNumberBox(element, zeroState, row, col, textStartRow, textStartCol, direction, willBeEmpty, key);
       }, randomDelay);
     });
   }
@@ -604,7 +652,10 @@ class BackgroundNumbersManager {
   private flipNumberBox(
     element: HTMLDivElement,
     zeroState: ZeroState,
-    characterIndex: number,
+    row: number,
+    col: number,
+    textStartRow: number,
+    textStartCol: number,
     direction: 'next' | 'prev',
     willBeEmpty: boolean,
     key: string
@@ -639,16 +690,19 @@ class BackgroundNumbersManager {
       if (willBeEmpty) {
         element.textContent = '';
       } else {
-        const newChar = this.getCharacterForPosition(characterIndex);
+        const newChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
         element.textContent = newChar;
       }
 
-      // Randomly change style for variety
-      if (!willBeEmpty && Math.random() < 0.3) {
+      // Check if this is main text position
+      const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+
+      // Randomly change style for variety (but keep main text solid)
+      if (!willBeEmpty && !isMainText && Math.random() < 0.3) {
         zeroState.isOutline = !zeroState.isOutline;
       }
       if (!willBeEmpty && Math.random() < 0.4) {
-        zeroState.opacity = 0.15 + Math.random() * 0.35;
+        zeroState.opacity = isMainText ? 0.5 : 0.15 + Math.random() * 0.35;
       }
 
       // Flip in from opposite direction
@@ -893,17 +947,35 @@ class BackgroundNumbersManager {
 
   private updateAllZerosContent() {
     this.updateDisplayCharacters();
-    let characterIndex = 0;
+
+    // Calculate text position
+    const { width, height } = this.getViewportDimensions();
+    const startX = -this.OVERFLOW;
+    const endX = width + this.OVERFLOW;
+    const cols = Math.ceil((endX - startX) / this.SPACING);
+    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
+    const textStartRow = Math.floor(rows / 2);
+    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
 
     Object.keys(this.zeroGrid).forEach(key => {
       const zeroState = this.zeroGrid[key];
       // Only update content for non-empty positions
       if (!zeroState.isEmpty) {
-        const displayChar = this.getCharacterForPosition(characterIndex);
+        const [rowStr, colStr] = key.split('-');
+        const row = parseInt(rowStr);
+        const col = parseInt(colStr);
+
+        const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
         zeroState.element.textContent = displayChar;
         // Update font family for mode changes
         zeroState.element.style.fontFamily = this.getFontFamily();
-        characterIndex++;
+
+        // Update opacity for main text positions
+        const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+        if (isMainText) {
+          zeroState.opacity = 0.5;
+          zeroState.isOutline = false;
+        }
       }
     });
   }
@@ -976,7 +1048,10 @@ class BackgroundNumbersManager {
     isEmpty: boolean,
     isOutline: boolean,
     opacity: number,
-    characterIndex: number
+    row: number,
+    col: number,
+    textStartRow: number,
+    textStartCol: number
   ) {
     if (!this.container) return;
 
@@ -1004,7 +1079,7 @@ class BackgroundNumbersManager {
 
     // Set content
     if (!isEmpty) {
-      const displayChar = this.getCharacterForPosition(characterIndex);
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
       element.textContent = displayChar;
     } else {
       element.textContent = '';
@@ -1033,7 +1108,7 @@ class BackgroundNumbersManager {
 
     // Get new viewport dimensions
     const { width, height } = this.getViewportDimensions();
-    
+
     // Clear existing elements but preserve state
     this.container.innerHTML = '';
     const oldGrid = { ...this.zeroGrid };
@@ -1048,6 +1123,10 @@ class BackgroundNumbersManager {
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
 
+    // Calculate text position
+    const textStartRow = Math.floor(rows / 2);
+    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
     // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
     const emptyPositionsCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
@@ -1058,7 +1137,6 @@ class BackgroundNumbersManager {
 
     // Regenerate grid while preserving existing states as much as possible
     let positionIndex = 0;
-    let characterIndex = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * this.SPACING;
@@ -1066,16 +1144,16 @@ class BackgroundNumbersManager {
         const zeroKey = `${row}-${col}`;
         const isEmpty = emptyPositions.has(positionIndex);
 
+        // Check if this is main text position
+        const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+
         // Try to restore from previous state
         const previousState = previousStates[zeroKey];
-        const isOutline = previousState?.isOutline ?? Math.random() < 0.5;
-        const opacity = previousState?.opacity ?? 0.25;
+        const isOutline = isMainText ? false : (previousState?.isOutline ?? Math.random() < 0.5);
+        const opacity = isMainText ? 0.5 : (previousState?.opacity ?? 0.25);
 
-        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, characterIndex);
+        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, row, col, textStartRow, textStartCol);
         positionIndex++;
-        if (!isEmpty) {
-          characterIndex++;
-        }
       }
     }
 
