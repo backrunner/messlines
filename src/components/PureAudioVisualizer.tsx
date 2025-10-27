@@ -40,6 +40,10 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
     // Initialize background numbers manager
     backgroundNumbersManagerRef.current = new BackgroundNumbersManager(backgroundContainerRef.current);
 
+    // Align background numbers center with line ball animation center
+    const center = lineAnimationRef.current.getCenterPoint();
+    backgroundNumbersManagerRef.current.setCenterPoint(center.x, center.y);
+
     return () => {
       // Clean up resources
       if (lineAnimationRef.current) {
@@ -107,6 +111,12 @@ const PureAudioVisualizer = ({ currentTrack, currentTrackIndex = 0, trackDirecti
       }
 
       resizeTimeout = setTimeout(() => {
+        // Update center point alignment after resize
+        if (lineAnimationRef.current && backgroundNumbersManagerRef.current) {
+          const center = lineAnimationRef.current.getCenterPoint();
+          backgroundNumbersManagerRef.current.setCenterPoint(center.x, center.y);
+        }
+
         // Notify background numbers manager to resize
         if (backgroundNumbersManagerRef.current) {
           backgroundNumbersManagerRef.current.handleResize();

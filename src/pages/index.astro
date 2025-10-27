@@ -17,7 +17,7 @@ const seo = {
 		<link rel="icon" type="image/png" href="/favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
 		<meta name="generator" content={Astro.generator} />
-		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 		<!-- Primary Meta Tags -->
@@ -93,5 +93,10 @@ const seo = {
 	</head>
 	<body>
 		<AudioController client:only="react" />
+		<script>
+			// @ts-ignore - defined by Vite at build time
+			const commitHash = __BUILD_COMMIT__;
+			console.log(`🎵 MessLines build ${commitHash}`);
+		</script>
 	</body>
 </html>

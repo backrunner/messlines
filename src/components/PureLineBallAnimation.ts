@@ -400,6 +400,17 @@ class PureLineBallAnimation {
     }
   }
 
+  /**
+   * Get the center point of the line ball animation
+   * Useful for aligning other visual elements
+   */
+  public getCenterPoint(): { x: number; y: number } {
+    return {
+      x: this.dimensions.width / 2,
+      y: this.dimensions.height / 2,
+    };
+  }
+
   public destroy() {
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);

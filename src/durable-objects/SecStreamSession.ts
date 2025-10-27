@@ -17,7 +17,8 @@ import type { ProcessorKeyExchangeRequest, ProcessorKeyExchangeResponse } from '
  *
  * Lifecycle:
  * - Sessions expire after 2 hours of inactivity
- * - Automatic cleanup via alarms
+ * - Automatic cleanup via optimized alarms that fire ONLY at expiration time
+ * - Alarm is rescheduled whenever session is accessed, minimizing wall-clock time
  * - Storage is deleted to avoid billing
  */
 export class SecStreamSession extends DurableObject {
@@ -46,8 +47,6 @@ export class SecStreamSession extends DurableObject {
 
   // Session expires after 2 hours of inactivity
   private readonly SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
-  // Check for cleanup every 30 minutes
-  private readonly CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
 
   // Rate limiting configuration
   // Normal playback with 3s slices + 3-slice prefetch ≈ 1-2 req/s
@@ -204,35 +203,46 @@ export class SecStreamSession extends DurableObject {
 
   /**
    * Initialize cleanup alarm
+   * Sets alarm to fire exactly when session expires (lastAccessedAt + SESSION_TIMEOUT_MS)
+   * This minimizes wall-clock time by only waking DO once at expiration
    */
   private async initializeAlarm() {
-    const currentAlarm = await this.ctx.storage.getAlarm();
-    if (!currentAlarm) {
-      // Schedule first cleanup check
-      await this.ctx.storage.setAlarm(Date.now() + this.CLEANUP_INTERVAL_MS);
-      console.log(`⏰ Alarm set for cleanup check in ${this.CLEANUP_INTERVAL_MS / 1000 / 60} minutes`);
+    // Calculate expiration time based on last access
+    const expirationTime = this.sessionData.lastAccessedAt + this.SESSION_TIMEOUT_MS;
+    const timeUntilExpiry = expirationTime - Date.now();
+
+    // Only set alarm if session hasn't expired yet
+    if (timeUntilExpiry > 0) {
+      await this.ctx.storage.setAlarm(expirationTime);
+      console.log(`⏰ Alarm set for session expiration in ${(timeUntilExpiry / 1000 / 60).toFixed(1)} minutes (${new Date(expirationTime).toISOString()})`);
+    } else {
+      // Session already expired, clean up immediately
+      console.log(`🗑️ Session already expired, cleaning up immediately`);
+      await this.destroySession();
     }
   }
 
   /**
-   * Alarm handler - called periodically to check for session expiry
-   * Implements automatic cleanup of idle sessions
+   * Alarm handler - called when session expires
+   * This is optimized to fire only once at the exact expiration time
+   * Minimizes wall-clock time by avoiding periodic checks
    */
   async alarm() {
-    // Use in-memory session data (already loaded in constructor)
     const now = Date.now();
     const idleTime = now - this.sessionData.lastAccessedAt;
 
-    console.log(`⏰ Alarm triggered for DO ${this.sessionData.doId}, idle for ${idleTime / 1000 / 60} minutes`);
+    console.log(`⏰ Alarm triggered for DO ${this.sessionData.doId}, idle for ${(idleTime / 1000 / 60).toFixed(1)} minutes`);
 
-    // Check if session has expired
-    if (idleTime > this.SESSION_TIMEOUT_MS) {
+    // Check if session has actually expired (safety check)
+    if (idleTime >= this.SESSION_TIMEOUT_MS) {
       console.log(`🗑️ DO ${this.sessionData.doId} expired, cleaning up...`);
       await this.destroySession();
     } else {
-      // Session still active, schedule next check
-      await this.ctx.storage.setAlarm(now + this.CLEANUP_INTERVAL_MS);
-      console.log(`⏰ Next cleanup check in ${this.CLEANUP_INTERVAL_MS / 1000 / 60} minutes`);
+      // Edge case: session was accessed shortly before alarm fired
+      // Reschedule alarm for the new expiration time
+      const newExpirationTime = this.sessionData.lastAccessedAt + this.SESSION_TIMEOUT_MS;
+      await this.ctx.storage.setAlarm(newExpirationTime);
+      console.log(`⏰ Session accessed recently, rescheduled alarm for ${new Date(newExpirationTime).toISOString()}`);
     }
   }
 
@@ -264,12 +274,18 @@ export class SecStreamSession extends DurableObject {
   }
 
   /**
-   * Update last accessed timestamp
+   * Update last accessed timestamp and reschedule alarm
+   * This ensures the alarm always fires at the correct expiration time
    */
   private async touchSession() {
     const now = Date.now();
     this.sessionData.lastAccessedAt = now;
     await this.ctx.storage.put('sessionData', this.sessionData);
+
+    // Reschedule alarm for new expiration time
+    const newExpirationTime = now + this.SESSION_TIMEOUT_MS;
+    await this.ctx.storage.setAlarm(newExpirationTime);
+    console.log(`⏰ Session accessed, alarm rescheduled for ${new Date(newExpirationTime).toISOString()}`);
   }
 
   /**
@@ -347,8 +363,6 @@ export class SecStreamSession extends DurableObject {
    * @param doId - The Durable Object ID (for routing verification)
    */
   async getSessionInfo(doId: string) {
-    const manager = this.ensureSessionManager();
-
     // Verify DO ID matches (sessionData loaded in constructor)
     if (this.sessionData.doId !== doId) {
       throw new Error(`Session ${doId} not found in this Durable Object (has: ${this.sessionData.doId})`);
@@ -356,6 +370,9 @@ export class SecStreamSession extends DurableObject {
 
     // Update last accessed time
     await this.touchSession();
+
+    // Ensure SessionManager is initialized (fetches audio from R2 if needed)
+    const manager = await this.ensureSessionManager();
 
     // Use the internal SessionManager ID for the actual secstream call
     const info = manager.getSessionInfo(this.sessionData.sessionId!);

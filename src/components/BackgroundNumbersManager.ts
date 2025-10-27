@@ -48,13 +48,18 @@ class BackgroundNumbersManager {
   private transientTimeoutId: NodeJS.Timeout | null = null;
   private beatTimeoutId: NodeJS.Timeout | null = null;
 
+  // Custom center point (set from line ball animation)
+  private customCenterX: number | null = null;
+  private customCenterY: number | null = null;
+
   // Configuration constants
   private readonly FONT_SIZE = 120;
   private readonly SPACING = this.FONT_SIZE * 0.8;
   private readonly OVERFLOW = this.FONT_SIZE;
   private readonly MIN_EMPTY_PERCENTAGE = 0.1; // At least 10% of positions should be empty
-  private readonly SESSION_STORAGE_KEY = 'background-display-mode';
+  private readonly STORAGE_KEY = 'messlines-background-display-mode';
   private readonly MODE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+  private readonly MOBILE_BREAKPOINT = 768; // Mobile device breakpoint (px)
 
   constructor(containerElement: HTMLDivElement) {
     this.container = containerElement;
@@ -65,37 +70,52 @@ class BackgroundNumbersManager {
   }
 
   /**
-   * Initialize display mode from session storage or randomly select one
+   * Initialize display mode from localStorage or randomly select one
    */
   private initializeDisplayMode() {
     try {
-      const stored = sessionStorage.getItem(this.SESSION_STORAGE_KEY);
+      const stored = localStorage.getItem(this.STORAGE_KEY);
+
       if (stored) {
         const data: SessionModeData = JSON.parse(stored);
         const now = Date.now();
 
         // Check if mode has expired
         if (data.expiresAt > now) {
-          this.displayMode = data.mode;
-          console.log(`📋 Restored display mode from session: ${data.mode}`);
-          return;
+          // Validate that the stored mode is a valid string matching our enum values
+          const modeStr = String(data.mode);
+          if (modeStr === 'title' || modeStr === 'index') {
+            // Convert string back to DisplayMode enum
+            this.displayMode = modeStr === 'title' ? DisplayMode.TITLE : DisplayMode.INDEX;
+            return;
+          } else {
+            // Clean up invalid data
+            localStorage.removeItem(this.STORAGE_KEY);
+          }
+        } else {
+          // Clean up expired data
+          localStorage.removeItem(this.STORAGE_KEY);
         }
       }
     } catch (error) {
-      console.warn('Failed to read session storage:', error);
+      // Clean up corrupted data
+      try {
+        localStorage.removeItem(this.STORAGE_KEY);
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
     }
 
-    // Randomly select a mode
+    // Randomly select a mode only if no valid stored mode exists
     const modes = [DisplayMode.TITLE, DisplayMode.INDEX];
     this.displayMode = modes[Math.floor(Math.random() * modes.length)];
 
-    // Save to session storage
+    // Save to localStorage
     this.saveDisplayMode();
-    console.log(`🎲 Randomly selected display mode: ${this.displayMode}`);
   }
 
   /**
-   * Save current display mode to session storage with expiry
+   * Save current display mode to localStorage with expiry
    */
   private saveDisplayMode() {
     try {
@@ -103,9 +123,9 @@ class BackgroundNumbersManager {
         mode: this.displayMode,
         expiresAt: Date.now() + this.MODE_EXPIRY_MS,
       };
-      sessionStorage.setItem(this.SESSION_STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
-      console.warn('Failed to save to session storage:', error);
+      // Ignore save errors
     }
   }
 
@@ -123,21 +143,32 @@ class BackgroundNumbersManager {
   }
 
   /**
+   * Check if device is mobile based on screen width
+   */
+  private isMobileDevice(): boolean {
+    return window.innerWidth < this.MOBILE_BREAKPOINT;
+  }
+
+  /**
    * Get display text based on current display mode and track
    */
   private getDisplayText(): string {
-    if (!this.currentTrack) {
-      return this.currentTrackIndex.toString();
-    }
+    // CRITICAL FIX: Check displayMode FIRST, before checking currentTrack
+    // This ensures displayMode is respected even during initialization when currentTrack is null
 
     switch (this.displayMode) {
       case DisplayMode.TITLE:
+        // If no track, show "MESSLINES" as default
+        if (!this.currentTrack) {
+          return 'MESSLINES';
+        }
         // If no cover, show "MESSLINES"; otherwise show title
         const hasCover = this.currentTrack.cover || this.currentTrack.coverKey;
         if (!hasCover) {
           return 'MESSLINES';
         }
         return this.currentTrack.title || this.currentTrack.name || this.currentTrackIndex.toString();
+
       case DisplayMode.INDEX:
       default:
         return this.currentTrackIndex.toString();
@@ -155,20 +186,42 @@ class BackgroundNumbersManager {
 
   /**
    * Get a character for a specific grid position
-   * For text row: displays characters in sequence
-   * For other rows: displays random characters from the text
+   * For text rows/cols: displays characters in sequence
+   * For other positions: displays random characters from the text
+   *
+   * On mobile: text is displayed vertically (top to bottom) in center column
+   * On desktop: text is displayed horizontally (left to right) in center rows
    */
-  private getCharacterForPosition(row: number, col: number, textStartRow: number, textStartCol: number): string {
+  private getCharacterForPosition(
+    row: number,
+    col: number,
+    textStartRow: number,
+    textStartCol: number,
+    textRowCount: number
+  ): string {
     if (this.displayCharacters.length === 0) {
       return '0';
     }
 
-    // Check if this position is in the text display row
-    if (row === textStartRow) {
-      const textIndex = col - textStartCol;
-      // If within the text range, show the character in sequence
-      if (textIndex >= 0 && textIndex < this.displayCharacters.length) {
+    const isMobile = this.isMobileDevice();
+
+    if (isMobile) {
+      // Mobile: Vertical layout (top to bottom in center column)
+      // Check if this position is in the center column within text rows
+      if (col === textStartCol && row >= textStartRow && row < textStartRow + this.displayCharacters.length) {
+        const textIndex = row - textStartRow;
         return this.displayCharacters[textIndex];
+      }
+    } else {
+      // Desktop: Horizontal layout (left to right in center rows)
+      // Check if this position is in any of the text display rows
+      const textEndRow = textStartRow + textRowCount - 1;
+      if (row >= textStartRow && row <= textEndRow) {
+        const textIndex = col - textStartCol;
+        // If within the text range, show the character in sequence
+        if (textIndex >= 0 && textIndex < this.displayCharacters.length) {
+          return this.displayCharacters[textIndex];
+        }
       }
     }
 
@@ -184,6 +237,69 @@ class BackgroundNumbersManager {
     return '"Chivo Mono", "Courier New", "Consolas", "Monaco", monospace';
   }
 
+  /**
+   * Set custom center point for alignment with line ball animation
+   * @param x - Center X coordinate in pixels
+   * @param y - Center Y coordinate in pixels
+   */
+  public setCenterPoint(x: number, y: number): void {
+    this.customCenterX = x;
+    this.customCenterY = y;
+    console.log(`📍 Background center point set to (${x}, ${y})`);
+  }
+
+  /**
+   * Get center position for text display
+   * Uses custom center if set, otherwise defaults to viewport center
+   */
+  private getCenterPosition(): { centerX: number; centerY: number } {
+    const { width, height } = this.getViewportDimensions();
+
+    return {
+      centerX: this.customCenterX ?? width / 2,
+      centerY: this.customCenterY ?? height / 2,
+    };
+  }
+
+  /**
+   * Convert pixel coordinates to grid row/col (with fractional precision)
+   */
+  private pixelToGrid(x: number, y: number): { row: number; col: number; fractionalRow: number; fractionalCol: number } {
+    const startX = -this.OVERFLOW;
+    const startY = -this.OVERFLOW;
+
+    const colFloat = (x - startX) / this.SPACING;
+    const rowFloat = (y - startY) / this.SPACING;
+
+    const col = Math.floor(colFloat);
+    const row = Math.floor(rowFloat);
+
+    const fractionalCol = colFloat - col;
+    const fractionalRow = rowFloat - row;
+
+    return { row, col, fractionalRow, fractionalCol };
+  }
+
+  /**
+   * Calculate number of text rows to display based on window height
+   * Returns 3-5 rows depending on available space
+   */
+  private getTextRowCount(): number {
+    const { height } = this.getViewportDimensions();
+
+    // Calculate how many rows we can fit
+    const totalRows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
+
+    // Scale between 3-5 rows based on total available rows
+    if (totalRows < 10) {
+      return 3;
+    } else if (totalRows < 15) {
+      return 4;
+    } else {
+      return 5;
+    }
+  }
+
   private generateInitialGrid() {
     if (!this.container) return;
 
@@ -196,20 +312,48 @@ class BackgroundNumbersManager {
     this.container.innerHTML = '';
     this.zeroGrid = {};
 
-    // Calculate grid bounds
-    const startX = -this.OVERFLOW;
-    const endX = width + this.OVERFLOW;
-    const startY = -this.OVERFLOW;
-    const endY = height + this.OVERFLOW;
+    // Get center position (custom or default) - no adjustments
+    const { centerX, centerY } = this.getCenterPosition();
+
+    // Convert center to grid coordinates with fractional precision
+    const centerGrid = this.pixelToGrid(centerX, centerY);
+
+    const isMobile = this.isMobileDevice();
+    let textStartRow: number;
+    let textStartCol: number;
+    let fractionalRowOffset = 0;
+    let fractionalColOffset = 0;
+
+    if (isMobile) {
+      // Mobile: Vertical layout (top to bottom in center column)
+      // Calculate starting row to vertically center the text
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (this.displayCharacters.length - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      fractionalRowOffset = textStartRowFloat - textStartRow;
+      // Center column
+      textStartCol = centerGrid.col;
+      fractionalColOffset = centerGrid.fractionalCol;
+    } else {
+      // Desktop: Horizontal layout (left to right in center rows)
+      const textRowCount = this.getTextRowCount();
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (textRowCount - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      fractionalRowOffset = textStartRowFloat - textStartRow;
+      // Calculate starting column to center the text horizontally with sub-column precision
+      const textStartColFloat = centerGrid.col + centerGrid.fractionalCol - (this.displayCharacters.length - 1) / 2;
+      textStartCol = Math.floor(textStartColFloat);
+      fractionalColOffset = textStartColFloat - textStartCol;
+    }
+
+    // Calculate grid bounds with fractional offsets applied
+    // These offsets shift the entire grid to align the center precisely
+    const startX = -this.OVERFLOW + fractionalColOffset * this.SPACING;
+    const endX = width + this.OVERFLOW + fractionalColOffset * this.SPACING;
+    const startY = -this.OVERFLOW + fractionalRowOffset * this.SPACING;
+    const endY = height + this.OVERFLOW + fractionalRowOffset * this.SPACING;
 
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
-
-    // Calculate center row for text display
-    const textStartRow = Math.floor(rows / 2);
-
-    // Calculate starting column to center the text horizontally
-    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
 
     // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
@@ -222,6 +366,9 @@ class BackgroundNumbersManager {
       emptyPositions.add(randomIndex);
     }
 
+    // Pass textRowCount for desktop horizontal layout (not used on mobile)
+    const textRowCount = isMobile ? 1 : this.getTextRowCount();
+
     let positionIndex = 0;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
@@ -230,7 +377,7 @@ class BackgroundNumbersManager {
         const zeroKey = `${row}-${col}`;
         const isEmpty = emptyPositions.has(positionIndex);
 
-        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty, row, col, textStartRow, textStartCol);
+        this.createZeroElement(zeroKey, x, y, startY, endY, isEmpty, row, col, textStartRow, textStartCol, textRowCount);
         positionIndex++;
       }
     }
@@ -246,7 +393,8 @@ class BackgroundNumbersManager {
     row: number = 0,
     col: number = 0,
     textStartRow: number = 0,
-    textStartCol: number = 0
+    textStartCol: number = 0,
+    textRowCount: number = 1
   ) {
     if (!this.container) return;
 
@@ -259,7 +407,17 @@ class BackgroundNumbersManager {
     const zeroColor = `#${hexGray}${hexGray}${hexGray}`;
 
     // Check if this is part of the main text display
-    const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+    const isMobile = this.isMobileDevice();
+    let isMainText: boolean;
+
+    if (isMobile) {
+      // Mobile: Vertical layout - main text is in center column
+      isMainText = col === textStartCol && row >= textStartRow && row < textStartRow + this.displayCharacters.length;
+    } else {
+      // Desktop: Horizontal layout - main text is in center rows
+      const textEndRow = textStartRow + textRowCount - 1;
+      isMainText = row >= textStartRow && row <= textEndRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+    }
 
     // Initial state - main text characters are more visible
     const isOutline = isMainText ? false : Math.random() < 0.5;
@@ -275,13 +433,16 @@ class BackgroundNumbersManager {
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
     element.style.opacity = '0'; // Initially hidden
+    // CRITICAL: Use translate(-50%, -50%) to center the element at its x,y position
+    // This ensures the element's geometric center is at (x, y), not its top-left corner
+    element.style.transform = 'translate(-50%, -50%)';
     element.style.transition = 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
 
     this.updateElementStyle(element, isOutline, zeroColor, 0);
 
     // If not an empty position, display character for this position
     if (!isEmpty) {
-      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol, textRowCount);
       element.textContent = displayChar;
     } else {
       element.textContent = ''; // Empty positions show no content
@@ -426,7 +587,7 @@ class BackgroundNumbersManager {
 
       // Increase randomness and diversity in opacity changes
       const opacityPattern = Math.random();
-      
+
       if (opacityPattern < 0.4) {
         // 40% chance: simple bright/dark toggle
         zeroState.opacity = zeroState.opacity > 0.25 ? 0.08 + Math.random() * 0.12 : 0.3 + Math.random() * 0.2;
@@ -462,12 +623,30 @@ class BackgroundNumbersManager {
 
     // Calculate text position for proper character assignment
     const { width, height } = this.getViewportDimensions();
-    const startX = -this.OVERFLOW;
-    const endX = width + this.OVERFLOW;
-    const cols = Math.ceil((endX - startX) / this.SPACING);
-    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
-    const textStartRow = Math.floor(rows / 2);
-    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
+    // Get center position (custom or default) - no adjustments
+    const { centerX, centerY } = this.getCenterPosition();
+
+    // Convert center to grid coordinates with fractional precision
+    const centerGrid = this.pixelToGrid(centerX, centerY);
+
+    const isMobile = this.isMobileDevice();
+    let textStartRow: number;
+    let textStartCol: number;
+
+    if (isMobile) {
+      // Mobile: Vertical layout
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (this.displayCharacters.length - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      textStartCol = centerGrid.col;
+    } else {
+      // Desktop: Horizontal layout
+      const textRowCount = this.getTextRowCount();
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (textRowCount - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      const textStartColFloat = centerGrid.col + centerGrid.fractionalCol - (this.displayCharacters.length - 1) / 2;
+      textStartCol = Math.floor(textStartColFloat);
+    }
 
     const totalPositions = allKeys.length;
     const targetEmptyCount = Math.floor(totalPositions * this.MIN_EMPTY_PERCENTAGE);
@@ -508,7 +687,8 @@ class BackgroundNumbersManager {
 
       zeroState.isEmpty = false;
       // Get proper character for this position
-      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
+      const textRowCount = isMobile ? 1 : this.getTextRowCount();
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol, textRowCount);
       zeroState.element.textContent = displayChar;
       this.updateZeroDisplay(key);
     });
@@ -580,11 +760,15 @@ class BackgroundNumbersManager {
 
     if (this.displayMode !== newMode) {
       this.displayMode = newMode;
-      // Save to session storage
+      // Save to localStorage FIRST before updating visuals
       this.saveDisplayMode();
       // Update display characters and refresh all content with new mode
       this.updateDisplayCharacters();
       this.updateAllZerosContent();
+    } else {
+      // Even if mode hasn't changed, ensure it's saved to localStorage
+      // This refreshes the expiry time
+      this.saveDisplayMode();
     }
   }
 
@@ -609,12 +793,33 @@ class BackgroundNumbersManager {
 
     // Calculate text position
     const { width, height } = this.getViewportDimensions();
-    const startX = -this.OVERFLOW;
-    const endX = width + this.OVERFLOW;
-    const cols = Math.ceil((endX - startX) / this.SPACING);
-    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
-    const textStartRow = Math.floor(rows / 2);
-    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
+    // Get center position (custom or default) - no adjustments
+    const { centerX, centerY } = this.getCenterPosition();
+
+    // Convert center to grid coordinates with fractional precision
+    const centerGrid = this.pixelToGrid(centerX, centerY);
+
+    const isMobile = this.isMobileDevice();
+    let textStartRow: number;
+    let textStartCol: number;
+
+    if (isMobile) {
+      // Mobile: Vertical layout
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (this.displayCharacters.length - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      textStartCol = centerGrid.col;
+    } else {
+      // Desktop: Horizontal layout
+      const textRowCount = this.getTextRowCount();
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (textRowCount - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      const textStartColFloat = centerGrid.col + centerGrid.fractionalCol - (this.displayCharacters.length - 1) / 2;
+      textStartCol = Math.floor(textStartColFloat);
+    }
+
+    // Pass textRowCount for character positioning
+    const textRowCount = isMobile ? 1 : this.getTextRowCount();
 
     // Regenerate empty positions randomly
     const totalPositions = allKeys.length;
@@ -643,7 +848,7 @@ class BackgroundNumbersManager {
       const randomDelay = Math.random() * 400;
 
       setTimeout(() => {
-        this.flipNumberBox(element, zeroState, row, col, textStartRow, textStartCol, direction, willBeEmpty, key);
+        this.flipNumberBox(element, zeroState, row, col, textStartRow, textStartCol, textRowCount, direction, willBeEmpty, key);
       }, randomDelay);
     });
   }
@@ -656,6 +861,7 @@ class BackgroundNumbersManager {
     col: number,
     textStartRow: number,
     textStartCol: number,
+    textRowCount: number,
     direction: 'next' | 'prev',
     willBeEmpty: boolean,
     key: string
@@ -665,7 +871,6 @@ class BackgroundNumbersManager {
     if (!parent) return;
 
     // Save original styles
-    const originalTransform = element.style.transform || '';
     const originalTransition = element.style.transition || '';
 
     // Set up 3D perspective
@@ -677,8 +882,9 @@ class BackgroundNumbersManager {
     const flipDuration = 300; // 300ms flip duration
 
     // Phase 1: Flip out (0 to 90 degrees)
+    // CRITICAL: Combine translate(-50%, -50%) with rotateY to maintain centering
     element.style.transition = `transform ${flipDuration / 2}ms cubic-bezier(0.55, 0.085, 0.68, 0.53), opacity ${flipDuration / 2}ms ease-out`;
-    element.style.transform = `rotateY(${rotationDeg}deg)`;
+    element.style.transform = `translate(-50%, -50%) rotateY(${rotationDeg}deg)`;
     element.style.opacity = '0';
 
     // Phase 2: Update content at midpoint and flip in (90 to 0 degrees)
@@ -690,12 +896,22 @@ class BackgroundNumbersManager {
       if (willBeEmpty) {
         element.textContent = '';
       } else {
-        const newChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
+        const newChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol, textRowCount);
         element.textContent = newChar;
       }
 
       // Check if this is main text position
-      const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+      const isMobile = this.isMobileDevice();
+      let isMainText: boolean;
+
+      if (isMobile) {
+        // Mobile: Vertical layout - main text is in center column
+        isMainText = col === textStartCol && row >= textStartRow && row < textStartRow + this.displayCharacters.length;
+      } else {
+        // Desktop: Horizontal layout - main text is in center rows
+        const textEndRow = textStartRow + textRowCount - 1;
+        isMainText = row >= textStartRow && row <= textEndRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+      }
 
       // Randomly change style for variety (but keep main text solid)
       if (!willBeEmpty && !isMainText && Math.random() < 0.3) {
@@ -706,12 +922,12 @@ class BackgroundNumbersManager {
       }
 
       // Flip in from opposite direction
-      element.style.transform = `rotateY(${-rotationDeg}deg)`;
+      element.style.transform = `translate(-50%, -50%) rotateY(${-rotationDeg}deg)`;
 
       // Small delay before flip in
       setTimeout(() => {
         element.style.transition = `transform ${flipDuration / 2}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${flipDuration / 2}ms ease-in`;
-        element.style.transform = 'rotateY(0deg)';
+        element.style.transform = 'translate(-50%, -50%) rotateY(0deg)';
 
         // Update display with new opacity
         this.updateZeroDisplay(key);
@@ -721,7 +937,7 @@ class BackgroundNumbersManager {
       setTimeout(() => {
         element.style.transformStyle = '';
         element.style.backfaceVisibility = '';
-        element.style.transform = originalTransform;
+        element.style.transform = 'translate(-50%, -50%)'; // Restore centering transform
         element.style.transition = originalTransition || 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
       }, flipDuration / 2 + 50);
     }, flipDuration / 2);
@@ -795,7 +1011,7 @@ class BackgroundNumbersManager {
 
       // Apply different random effects based on frequency type
       const randomFactor = Math.random(); // Random factor 0-1
-      
+
       if (frequency === 'low') {
         // Low frequency: prefer outline switching with random opacity changes
         if (randomFactor < 0.7) {
@@ -823,7 +1039,7 @@ class BackgroundNumbersManager {
         if (randomFactor < 0.6) {
           zeroState.isOutline = !zeroState.isOutline;
         }
-        
+
         // More random opacity changes
         const opacityChoice = Math.random();
         if (opacityChoice < 0.33) {
@@ -872,24 +1088,24 @@ class BackgroundNumbersManager {
       // Create multiple random beat reaction patterns
       const beatPattern = Math.random();
       const intensityMultiplier = 0.3 + Math.random() * 0.7; // Random intensity multiplier 0.3-1.0
-      
+
       if (beatPattern < 0.4) {
         // Pattern 1: Pure opacity flicker (40% chance)
         const opacityBoost = strength * intensityMultiplier * 0.6;
         const randomBoost = Math.random() * 0.3; // Additional random boost
         zeroState.opacity = Math.min(0.9, zeroState.opacity + opacityBoost + randomBoost);
-        
+
       } else if (beatPattern < 0.7) {
         // Pattern 2: Opacity + outline switching (30% chance)
         const opacityBoost = strength * intensityMultiplier * 0.4;
         const randomBoost = Math.random() * 0.25;
         zeroState.opacity = Math.min(0.85, zeroState.opacity + opacityBoost + randomBoost);
-        
+
         // 50% chance to switch outline
         if (Math.random() < 0.5) {
           zeroState.isOutline = !zeroState.isOutline;
         }
-        
+
       } else if (beatPattern < 0.85) {
         // Pattern 3: Random opacity setting (15% chance)
         const randomOpacity = Math.random();
@@ -900,7 +1116,7 @@ class BackgroundNumbersManager {
         } else {
           zeroState.opacity = 0.1 + Math.random() * 0.2; // Dim
         }
-        
+
       } else {
         // Pattern 4: Extreme reaction (15% chance) - creates dramatic effects
         if (Math.random() < 0.5) {
@@ -910,7 +1126,7 @@ class BackgroundNumbersManager {
         } else {
           // Extremely dark with quick recovery
           zeroState.opacity = 0.02 + Math.random() * 0.08;
-          
+
           // Delayed recovery effect
           setTimeout(() => {
             if (this.zeroGrid[key]) {
@@ -950,12 +1166,33 @@ class BackgroundNumbersManager {
 
     // Calculate text position
     const { width, height } = this.getViewportDimensions();
-    const startX = -this.OVERFLOW;
-    const endX = width + this.OVERFLOW;
-    const cols = Math.ceil((endX - startX) / this.SPACING);
-    const rows = Math.ceil((height + 2 * this.OVERFLOW) / this.SPACING);
-    const textStartRow = Math.floor(rows / 2);
-    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
+
+    // Get center position (custom or default) - no adjustments
+    const { centerX, centerY } = this.getCenterPosition();
+
+    // Convert center to grid coordinates with fractional precision
+    const centerGrid = this.pixelToGrid(centerX, centerY);
+
+    const isMobile = this.isMobileDevice();
+    let textStartRow: number;
+    let textStartCol: number;
+    let textEndRow: number;
+
+    if (isMobile) {
+      // Mobile: Vertical layout
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (this.displayCharacters.length - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      textStartCol = centerGrid.col;
+      textEndRow = textStartRow + this.displayCharacters.length - 1;
+    } else {
+      // Desktop: Horizontal layout
+      const textRowCount = this.getTextRowCount();
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (textRowCount - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      const textStartColFloat = centerGrid.col + centerGrid.fractionalCol - (this.displayCharacters.length - 1) / 2;
+      textStartCol = Math.floor(textStartColFloat);
+      textEndRow = textStartRow + textRowCount - 1;
+    }
 
     Object.keys(this.zeroGrid).forEach(key => {
       const zeroState = this.zeroGrid[key];
@@ -965,13 +1202,22 @@ class BackgroundNumbersManager {
         const row = parseInt(rowStr);
         const col = parseInt(colStr);
 
-        const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
+        const textRowCount = isMobile ? 1 : this.getTextRowCount();
+        const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol, textRowCount);
         zeroState.element.textContent = displayChar;
         // Update font family for mode changes
         zeroState.element.style.fontFamily = this.getFontFamily();
 
         // Update opacity for main text positions
-        const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+        let isMainText: boolean;
+        if (isMobile) {
+          // Mobile: Vertical layout
+          isMainText = col === textStartCol && row >= textStartRow && row <= textEndRow;
+        } else {
+          // Desktop: Horizontal layout
+          isMainText = row >= textStartRow && row <= textEndRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+        }
+
         if (isMainText) {
           zeroState.opacity = 0.5;
           zeroState.isOutline = false;
@@ -983,7 +1229,7 @@ class BackgroundNumbersManager {
   // Helper method: preserve current states for resize recovery
   private preserveCurrentStates(): { [key: string]: { isOutline: boolean; opacity: number; isEmpty: boolean } } {
     const states: { [key: string]: { isOutline: boolean; opacity: number; isEmpty: boolean } } = {};
-    
+
     Object.keys(this.zeroGrid).forEach(key => {
       const zeroState = this.zeroGrid[key];
       states[key] = {
@@ -992,21 +1238,21 @@ class BackgroundNumbersManager {
         isEmpty: zeroState.isEmpty,
       };
     });
-    
+
     return states;
   }
 
   // Helper method: get existing empty positions
   private getExistingEmptyPositions(oldGrid: { [key: string]: ZeroState }, newRows: number, newCols: number): Set<number> {
     const emptyPositions = new Set<number>();
-    
+
     // Traverse old grid, find empty positions, and try to map to new grid
     Object.keys(oldGrid).forEach(key => {
       if (oldGrid[key].isEmpty) {
         const [rowStr, colStr] = key.split('-');
         const row = parseInt(rowStr);
         const col = parseInt(colStr);
-        
+
         // If old position is within new grid bounds, keep it empty
         if (row < newRows && col < newCols) {
           const positionIndex = row * newCols + col;
@@ -1014,27 +1260,27 @@ class BackgroundNumbersManager {
         }
       }
     });
-    
+
     return emptyPositions;
   }
 
   // Helper method: redistribute empty positions
   private redistributeEmptyPositions(existingEmptyPositions: Set<number>, totalPositions: number, targetEmptyCount: number): Set<number> {
     const emptyPositions = new Set(existingEmptyPositions);
-    
+
     // If too few empty positions exist, add more
     while (emptyPositions.size < targetEmptyCount) {
       const randomIndex = Math.floor(Math.random() * totalPositions);
       emptyPositions.add(randomIndex);
     }
-    
+
     // If too many empty positions exist, randomly remove some
     while (emptyPositions.size > targetEmptyCount) {
       const positionsArray = Array.from(emptyPositions);
       const randomIndex = Math.floor(Math.random() * positionsArray.length);
       emptyPositions.delete(positionsArray[randomIndex]);
     }
-    
+
     return emptyPositions;
   }
 
@@ -1051,7 +1297,8 @@ class BackgroundNumbersManager {
     row: number,
     col: number,
     textStartRow: number,
-    textStartCol: number
+    textStartCol: number,
+    textRowCount: number
   ) {
     if (!this.container) return;
 
@@ -1073,13 +1320,16 @@ class BackgroundNumbersManager {
     element.style.userSelect = 'none';
     element.style.pointerEvents = 'none';
     element.style.opacity = '0'; // Initially hidden, will update based on visibility state later
+    // CRITICAL: Use translate(-50%, -50%) to center the element at its x,y position
+    // This ensures the element's geometric center is at (x, y), not its top-left corner
+    element.style.transform = 'translate(-50%, -50%)';
     element.style.transition = 'color 1.5s ease-in-out, -webkit-text-stroke 1.5s ease-in-out, opacity 1.2s ease-in-out';
 
     this.updateElementStyle(element, isOutline, zeroColor, 0);
 
     // Set content
     if (!isEmpty) {
-      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol);
+      const displayChar = this.getCharacterForPosition(row, col, textStartRow, textStartCol, textRowCount);
       element.textContent = displayChar;
     } else {
       element.textContent = '';
@@ -1114,18 +1364,50 @@ class BackgroundNumbersManager {
     const oldGrid = { ...this.zeroGrid };
     this.zeroGrid = {};
 
-    // Recalculate grid
-    const startX = -this.OVERFLOW;
-    const endX = width + this.OVERFLOW;
-    const startY = -this.OVERFLOW;
-    const endY = height + this.OVERFLOW;
+    // Get center position (custom or default) - no adjustments
+    const { centerX, centerY } = this.getCenterPosition();
+
+    // Convert center to grid coordinates with fractional precision
+    const centerGrid = this.pixelToGrid(centerX, centerY);
+
+    const isMobile = this.isMobileDevice();
+    let textStartRow: number;
+    let textStartCol: number;
+    let fractionalRowOffset = 0;
+    let fractionalColOffset = 0;
+    let textEndRow: number;
+
+    if (isMobile) {
+      // Mobile: Vertical layout
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (this.displayCharacters.length - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      fractionalRowOffset = textStartRowFloat - textStartRow;
+      textStartCol = centerGrid.col;
+      fractionalColOffset = centerGrid.fractionalCol;
+      textEndRow = textStartRow + this.displayCharacters.length - 1;
+    } else {
+      // Desktop: Horizontal layout
+      const textRowCount = this.getTextRowCount();
+      const textStartRowFloat = centerGrid.row + centerGrid.fractionalRow - (textRowCount - 1) / 2;
+      textStartRow = Math.floor(textStartRowFloat);
+      fractionalRowOffset = textStartRowFloat - textStartRow;
+      const textStartColFloat = centerGrid.col + centerGrid.fractionalCol - (this.displayCharacters.length - 1) / 2;
+      textStartCol = Math.floor(textStartColFloat);
+      fractionalColOffset = textStartColFloat - textStartCol;
+      textEndRow = textStartRow + textRowCount - 1;
+    }
+
+    // Pass textRowCount for character positioning
+    const textRowCount = isMobile ? 1 : this.getTextRowCount();
+
+    // Recalculate grid with fractional offsets
+    const startX = -this.OVERFLOW + fractionalColOffset * this.SPACING;
+    const endX = width + this.OVERFLOW + fractionalColOffset * this.SPACING;
+    const startY = -this.OVERFLOW + fractionalRowOffset * this.SPACING;
+    const endY = height + this.OVERFLOW + fractionalRowOffset * this.SPACING;
 
     const cols = Math.ceil((endX - startX) / this.SPACING);
     const rows = Math.ceil((endY - startY) / this.SPACING);
-
-    // Calculate text position
-    const textStartRow = Math.floor(rows / 2);
-    const textStartCol = Math.floor((cols - this.displayCharacters.length) / 2);
 
     // Calculate total positions and required empty positions
     const totalPositions = rows * cols;
@@ -1145,14 +1427,21 @@ class BackgroundNumbersManager {
         const isEmpty = emptyPositions.has(positionIndex);
 
         // Check if this is main text position
-        const isMainText = row === textStartRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+        let isMainText: boolean;
+        if (isMobile) {
+          // Mobile: Vertical layout - main text is in center column
+          isMainText = col === textStartCol && row >= textStartRow && row <= textEndRow;
+        } else {
+          // Desktop: Horizontal layout - main text is in center rows
+          isMainText = row >= textStartRow && row <= textEndRow && col >= textStartCol && col < textStartCol + this.displayCharacters.length;
+        }
 
         // Try to restore from previous state
         const previousState = previousStates[zeroKey];
         const isOutline = isMainText ? false : (previousState?.isOutline ?? Math.random() < 0.5);
         const opacity = isMainText ? 0.5 : (previousState?.opacity ?? 0.25);
 
-        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, row, col, textStartRow, textStartCol);
+        this.createZeroElementWithState(zeroKey, x, y, startY, endY, isEmpty, isOutline, opacity, row, col, textStartRow, textStartCol, textRowCount);
         positionIndex++;
       }
     }

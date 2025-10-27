@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Icon } from '@iconify/react';
 import { PlayState } from '../constants/playlist';
 
@@ -7,25 +8,46 @@ interface PlayIndicatorProps {
 }
 
 const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
-  // Play indicator is always visible (this component only renders when autoplay is blocked)
-  const needsUserInteraction = true;
+  const [isVisible, setIsVisible] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+
+  // Fade in when mounted
+  useEffect(() => {
+    // Small delay to ensure CSS transition works
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 10);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleClick = () => {
+    // Start fade out animation
+    setIsFadingOut(true);
+
+    // Wait for fade out animation to complete before calling onPlay
+    setTimeout(() => {
+      onPlay();
+    }, 400); // Match the CSS transition duration
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
+  };
 
   return (
     <div
-      className={`play-indicator ${needsUserInteraction ? 'visible' : ''}`}
+      className={`play-indicator ${isVisible && !isFadingOut ? 'visible' : ''} ${isFadingOut ? 'fading-out' : ''}`}
       role="button"
       aria-label="Click to start playing music"
-      onClick={onPlay}
+      onClick={handleClick}
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onPlay();
-        }
-      }}
+      onKeyDown={handleKeyDown}
     >
       <Icon icon="mdi:play" width="28" height="28" />
-      
+
       <style>{`
         .play-indicator {
           position: fixed;
@@ -51,10 +73,18 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           cursor: pointer;
         }
 
+        /* Fade in animation */
         .play-indicator.visible {
           opacity: 1;
           transform: scale(1) translateY(0);
           pointer-events: auto;
+        }
+
+        /* Fade out animation */
+        .play-indicator.fading-out {
+          opacity: 0;
+          transform: scale(0.8) translateY(-10px);
+          pointer-events: none;
         }
 
         .play-indicator:hover {
@@ -85,7 +115,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
         }
 
         /* Breathing effect */
-        .play-indicator.visible {
+        .play-indicator.visible:not(.fading-out) {
           animation: playBreathing 3s ease-in-out infinite alternate;
         }
 
@@ -99,7 +129,7 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
         }
 
         /* Pulse effect */
-        .play-indicator.visible::after {
+        .play-indicator.visible:not(.fading-out)::after {
           content: '';
           position: absolute;
           top: -4px;
@@ -169,6 +199,10 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
           .play-indicator.visible {
             opacity: 1;
             transform: none;
+          }
+
+          .play-indicator.fading-out {
+            opacity: 0;
           }
 
           .play-indicator:hover {
