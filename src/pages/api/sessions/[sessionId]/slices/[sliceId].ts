@@ -1,10 +1,12 @@
 import type { APIRoute } from 'astro';
-import { getSessionDO } from '../../../../../utils/durable-objects.js';
-import { sessionCache } from '../../../../../utils/session-cache.js';
+import { getSessionMetadata } from '../../../../../utils/storage/session-storage-adapter.js';
+import { sessionCache } from '../../../../../utils/session/session-cache.js';
+import { globalWorkerSessionManager } from '../../../../../utils/session/global-session-manager.js';
 
 export const GET: APIRoute = async ({ params, url, locals }) => {
+  const startTime = Date.now();
   try {
-    const sessionId = params.sessionId;
+    const sessionId = params.sessionId;  // This is actually the DO ID
     const sliceId = params.sliceId;
     const trackId = url.searchParams.get('trackId') || undefined;
 
@@ -15,66 +17,71 @@ export const GET: APIRoute = async ({ params, url, locals }) => {
       });
     }
 
-    // Check worker memory cache first for session validation
-    const cachedSession = sessionCache.get(sessionId);
+    console.log(`🔐 getSlice API START: session ${sessionId}, slice ${sliceId}`);
+
+    // Check worker memory cache for session metadata
+    let cachedSession = sessionCache.get(sessionId);
+
+    // Get R2 bucket (optional in dev mode)
+    const bucket = locals.runtime?.env?.AUDIO_BUCKET;
+
+    // If not in cache, fetch from storage (DO in prod, memory in dev)
     if (!cachedSession) {
-      console.log(`⚠️ Worker cache MISS for session ${sessionId}, will access DO`);
-    } else {
-      console.log(`✅ Worker cache HIT for session ${sessionId}, verified session exists`);
-      // Session exists in cache, we still need to access DO for slice retrieval
-      // (slices are encrypted per-session and can't be cached in worker)
-    }
+      console.log(`⚠️ Cache MISS for session ${sessionId}, fetching from storage...`);
 
-    // Get Durable Objects namespace
-    const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
-    if (!sessionsDO) {
-      return new Response(JSON.stringify({ error: 'Session storage not available' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
-      });
-    }
+      try {
+        const metadata = await getSessionMetadata(sessionId, locals);
+        console.log(`⏱️ [${Date.now() - startTime}ms] Fetched metadata from storage`);
 
-    // Get the Durable Object for this session
-    const sessionDO = getSessionDO(sessionsDO, sessionId);
+        // Cache for future requests
+        cachedSession = {
+          doId: sessionId,
+          sessionId: metadata.sessionId,
+          audioKeys: metadata.audioKeys,
+          createdAt: metadata.createdAt,
+          cachedAt: Date.now(),
+        };
+        sessionCache.set(sessionId, cachedSession);
+      } catch (doError: unknown) {
+        const errorMessage = doError instanceof Error ? doError.message : String(doError);
 
-    // Try to get slice, handle errors with cache invalidation
-    let slice;
-    try {
-      slice = await sessionDO.getSlice(sessionId, sliceId, trackId);
-    } catch (doError: unknown) {
-      // Check if error indicates session not found or expired
-      const errorMessage = doError instanceof Error ? doError.message : String(doError);
+        if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
+          sessionCache.markDeleted(sessionId);
+          console.warn(`⚠️ Session ${sessionId} not found or expired in DO`);
 
-      if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
-        // Invalidate cache - session was deleted/expired in DO
-        sessionCache.markDeleted(sessionId);
-        console.warn(`⚠️ Session ${sessionId} not found or expired in DO, invalidated cache`);
+          return new Response(JSON.stringify({
+            error: 'Session not found or expired',
+            details: errorMessage
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+          });
+        }
 
-        return new Response(JSON.stringify({
-          error: 'Session not found or expired',
-          details: errorMessage
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
-        });
+        throw doError;
       }
-
-      // Re-throw other errors
-      throw doError;
+    } else {
+      console.log(`✅ Cache HIT for session ${sessionId}`);
     }
+
+    console.log(`⏱️ [${Date.now() - startTime}ms] Starting slice generation in worker...`);
+
+    // Generate slice in WORKER (not DO!) - This is the key performance improvement
+    const slice = await globalWorkerSessionManager.getSlice(
+      cachedSession.sessionId,  // Use internal sessionId
+      cachedSession.audioKeys,
+      sliceId,
+      bucket,
+      trackId
+    );
+
+    console.log(`⏱️ [${Date.now() - startTime}ms] Slice generation completed`);
 
     if (!slice) {
-      // Session exists but slice not found - might be invalid sliceId
       return new Response(JSON.stringify({ error: 'Slice not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
-    }
-
-    // Update cache TTL after successful slice fetch (session is still active)
-    if (cachedSession) {
-      sessionCache.set(sessionId, cachedSession);
-      console.log(`🔄 Refreshed cache TTL for session ${sessionId}`);
     }
 
     // Combine encrypted data and IV into single binary payload
@@ -89,12 +96,11 @@ export const GET: APIRoute = async ({ params, url, locals }) => {
       'Connection': 'keep-alive',
       'X-Slice-ID': slice.id,
       'X-Slice-Sequence': slice.sequence.toString(),
-      'X-Session-ID': slice.sessionId,
+      'X-Session-ID': sessionId,  // Return DO ID to client
       'X-Encrypted-Data-Length': slice.encryptedData.byteLength.toString(),
       'X-IV-Length': slice.iv.byteLength.toString(),
     };
 
-    // Include track ID in headers if present
     if (slice.trackId) {
       headers['X-Track-ID'] = slice.trackId;
     }
@@ -104,10 +110,10 @@ export const GET: APIRoute = async ({ params, url, locals }) => {
       headers,
     });
 
-    console.log(`🔐 Serving binary slice: ${sliceId}, size: ${combinedData.byteLength} bytes`);
+    console.log(`🔐 Served slice ${sliceId}, size: ${combinedData.byteLength} bytes, TOTAL TIME: ${Date.now() - startTime}ms`);
     return response;
   } catch (error) {
-    console.error('❌ Get slice error:', error);
+    console.error(`❌ Get slice error (after ${Date.now() - startTime}ms):`, error);
     return new Response(JSON.stringify({
       error: 'Failed to get slice',
       details: error instanceof Error ? error.message : 'Unknown error'

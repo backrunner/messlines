@@ -1,10 +1,12 @@
 import type { APIRoute } from 'astro';
-import { getSessionDO } from '../../../../utils/durable-objects.js';
-import { sessionCache } from '../../../../utils/session-cache.js';
+import { getSessionMetadata } from '../../../../utils/storage/session-storage-adapter.js';
+import { sessionCache } from '../../../../utils/session/session-cache.js';
+import { globalWorkerSessionManager } from '../../../../utils/session/global-session-manager.js';
 
 export const GET: APIRoute = async ({ params, locals }) => {
+  const startTime = Date.now();
   try {
-    const sessionId = params.sessionId;
+    const sessionId = params.sessionId;  // This is actually the DO ID
     if (!sessionId) {
       return new Response(JSON.stringify({ error: 'Session ID is required' }), {
         status: 400,
@@ -12,63 +14,69 @@ export const GET: APIRoute = async ({ params, locals }) => {
       });
     }
 
-    // Check worker memory cache first for session validation
-    const cachedSession = sessionCache.get(sessionId);
+    console.log(`📋 getSessionInfo API START: session ${sessionId}`);
+
+    // Check worker memory cache for session metadata
+    let cachedSession = sessionCache.get(sessionId);
+
+    // Get R2 bucket (optional in dev mode)
+    const bucket = locals.runtime?.env?.AUDIO_BUCKET;
+
+    // If not in cache, fetch from storage (DO in prod, memory in dev)
     if (!cachedSession) {
-      console.log(`⚠️ Worker cache MISS for session ${sessionId}, will access DO`);
-    } else {
-      console.log(`✅ Worker cache HIT for session ${sessionId}, verified session exists`);
-    }
+      console.log(`⚠️ Cache MISS for session ${sessionId}, fetching from storage...`);
 
-    // Get Durable Objects namespace
-    const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
-    if (!sessionsDO) {
-      return new Response(JSON.stringify({ error: 'Session storage not available' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
-      });
-    }
+      try {
+        const metadata = await getSessionMetadata(sessionId, locals);
+        console.log(`⏱️ [${Date.now() - startTime}ms] Fetched metadata from storage`);
 
-    // Get the Durable Object for this session
-    const sessionDO = getSessionDO(sessionsDO, sessionId);
+        // Cache for future requests
+        cachedSession = {
+          doId: sessionId,
+          sessionId: metadata.sessionId,
+          audioKeys: metadata.audioKeys,
+          createdAt: metadata.createdAt,
+          cachedAt: Date.now(),
+        };
+        sessionCache.set(sessionId, cachedSession);
+      } catch (doError: unknown) {
+        const errorMessage = doError instanceof Error ? doError.message : String(doError);
 
-    // Try to get session info, handle errors with cache invalidation
-    let info;
-    try {
-      info = await sessionDO.getSessionInfo(sessionId);
-    } catch (doError: unknown) {
-      // Check if error indicates session not found or expired
-      const errorMessage = doError instanceof Error ? doError.message : String(doError);
+        if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
+          sessionCache.markDeleted(sessionId);
+          console.warn(`⚠️ Session ${sessionId} not found or expired in DO`);
 
-      if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
-        // Invalidate cache - session was deleted/expired in DO
-        sessionCache.markDeleted(sessionId);
-        console.warn(`⚠️ Session ${sessionId} not found or expired in DO, invalidated cache`);
+          return new Response(JSON.stringify({
+            error: 'Session not found or expired',
+            details: errorMessage
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+          });
+        }
 
-        return new Response(JSON.stringify({
-          error: 'Session not found or expired',
-          details: errorMessage
-        }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
-        });
+        throw doError;
       }
-
-      // Re-throw other errors
-      throw doError;
+    } else {
+      console.log(`✅ Cache HIT for session ${sessionId}`);
     }
+
+    console.log(`⏱️ [${Date.now() - startTime}ms] Getting session info from worker...`);
+
+    // Get session info in WORKER (not DO!)
+    const info = await globalWorkerSessionManager.getSessionInfo(
+      cachedSession.sessionId,  // Use internal sessionId
+      cachedSession.audioKeys,
+      bucket
+    );
+
+    console.log(`⏱️ [${Date.now() - startTime}ms] Session info retrieved`);
 
     if (!info) {
       return new Response(JSON.stringify({ error: 'Session not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
       });
-    }
-
-    // Update cache TTL after successful info fetch (session is still active)
-    if (cachedSession) {
-      sessionCache.set(sessionId, cachedSession);
-      console.log(`🔄 Refreshed cache TTL for session ${sessionId}`);
     }
 
     return new Response(JSON.stringify(info), {
@@ -79,7 +87,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
       }
     });
   } catch (error) {
-    console.error('❌ Get session info error:', error);
+    console.error(`❌ Get session info error (after ${Date.now() - startTime}ms):`, error);
     return new Response(JSON.stringify({
       error: 'Failed to get session info',
       details: error instanceof Error ? error.message : 'Unknown error'

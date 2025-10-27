@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
-import { createSessionDO } from '../../utils/durable-objects.js';
-import { validateAudioKeys } from '../../utils/playlist-validator.js';
-import { sessionCache } from '../../utils/session-cache.js';
+import { createSessionDO } from '../../utils/storage/durable-objects.js';
+import { validateAudioKeys } from '../../utils/validation/playlist-validator.js';
+import { sessionCache } from '../../utils/session/session-cache.js';
+import { nanoid } from 'nanoid';
+import { isDevMode, createSession as createSessionStorage } from '../../utils/storage/session-storage-adapter.js';
 
 // Rate limiting configuration
 const MAX_SESSIONS_PER_WINDOW = 10;
@@ -94,39 +96,29 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     console.log(`✅ Validated audio keys: ${keysToLoad.join(', ')}`);
 
-    // Get Durable Objects namespace from Cloudflare environment
-    const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
+    // Generate session ID for secstream (internal use)
+    const sessionId = nanoid();
 
-    if (!sessionsDO) {
-      console.error('❌ Durable Objects namespace not available');
-      return new Response(JSON.stringify({ error: 'Session storage not available' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
-      });
-    }
+    // Create session (uses Durable Objects in prod, in-memory in dev)
+    // Returns the DO ID (or session ID in dev mode) for client routing
+    console.log(`🏗️ Creating session with internal ID: ${sessionId}`);
+    const doId = await createSessionStorage(sessionId, keysToLoad, locals);
 
-    // Create a new Durable Object for this session
-    const { stub: sessionDO, sessionId: doId } = createSessionDO(sessionsDO);
-
-    // Create session in the Durable Object with ONLY audio keys (no buffers)
-    // Audio will be fetched from R2 on-demand when needed (during key exchange)
-    console.log(`🏗️ Creating lightweight session in Durable Object: ${doId}`);
-    const sessionId = await sessionDO.createSession(doId, keysToLoad);
-
-    console.log(`✅ Session created successfully. Client session ID: ${sessionId}`);
+    console.log(`✅ Session created successfully. Internal ID: ${sessionId}, DO ID: ${doId}`);
 
     // Cache session metadata in worker memory to reduce future DO requests
-    sessionCache.set(sessionId, {
+    // Use doId as key since that's what client uses for routing
+    sessionCache.set(doId, {
       doId,
       sessionId,
       audioKeys: keysToLoad,
       createdAt: Date.now(),
       cachedAt: Date.now(),
     });
-    console.log(`💾 Cached session ${sessionId} in worker memory`);
+    console.log(`💾 Cached session metadata for ${doId} in worker memory`);
 
     const response = {
-      sessionId,
+      sessionId: doId,  // Return doId to client for routing
       audioKeys: keysToLoad,
       trackCount: keysToLoad.length,
       message: 'Session created successfully',

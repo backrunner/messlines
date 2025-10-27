@@ -27,3 +27,4 @@ pnpm-debug.log*
 .claude/settings.local.json
 .wrangler
 public/audios
+wrangler.toml

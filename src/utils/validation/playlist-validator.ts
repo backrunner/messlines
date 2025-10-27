@@ -1,4 +1,4 @@
-import { AUDIO_PLAYLIST } from '../constants/playlist';
+import { AUDIO_PLAYLIST } from '../../constants/playlist';
 
 /**
  * Validate if an audio key is in the allowed playlist
