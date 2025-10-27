@@ -1,4 +1,9 @@
-import type { DurableObjectNamespace } from '@cloudflare/workers-types';
+/**
+ * Validate if a string is a valid Durable Object ID (64 hex digits)
+ */
+function isValidDurableObjectId(id: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(id);
+}
 
 /**
  * Get a Durable Object stub for a session
@@ -7,6 +12,13 @@ import type { DurableObjectNamespace } from '@cloudflare/workers-types';
  * @returns DO stub
  */
 export function getSessionDO(namespace: DurableObjectNamespace, sessionId: string) {
+  // Validate the DO ID format
+  if (!isValidDurableObjectId(sessionId)) {
+    console.error(`❌ Invalid Durable Object ID: "${sessionId}" (length: ${sessionId.length})`);
+    console.error(`Expected: 64 hexadecimal characters`);
+    throw new Error(`Invalid Durable Object ID: must be 64 hex digits, got "${sessionId.substring(0, 20)}..."`);
+  }
+
   // Reconstruct the DO ID from the hex string
   // IMPORTANT: Use idFromString, not idFromName!
   // idFromName creates a different ID from the same string

@@ -19,33 +19,22 @@ export interface SessionMetadata {
 
 /**
  * Check if we're running in development mode
- * Uses multiple checks to reliably detect dev vs production
+ * Uses Cloudflare-specific bindings as the primary indicator
  */
 export function isDevMode(locals: any): boolean {
-  // Check 1: If running in Node.js (dev), process.env.NODE_ENV will be available
-  // In Cloudflare Workers (prod), there's no process.env
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
-    return true;
+  // Primary check: If both DO and R2 bindings exist, we're in production
+  const hasDO = !!locals.runtime?.env?.SECSTREAM_SESSIONS;
+  const hasR2 = !!locals.runtime?.env?.AUDIO_BUCKET;
+
+  // If we have both Cloudflare bindings, definitely production
+  if (hasDO && hasR2) {
+    console.log('🌐 Environment: PRODUCTION (Cloudflare Workers)');
+    return false;
   }
 
-  // Check 2: Astro dev mode check - import.meta.env.DEV is available
-  // This is replaced at build time by Vite/Astro
-  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
-    return true;
-  }
-
-  // Check 3: If SECSTREAM_SESSIONS is not available, definitely dev mode
-  if (!locals.runtime?.env?.SECSTREAM_SESSIONS) {
-    return true;
-  }
-
-  // Check 4: Check if AUDIO_BUCKET is missing (R2 not available in local dev)
-  if (!locals.runtime?.env?.AUDIO_BUCKET) {
-    return true;
-  }
-
-  // Default to production mode
-  return false;
+  // Otherwise, it's development mode
+  console.log('💻 Environment: DEVELOPMENT (Local)');
+  return true;
 }
 
 /**
@@ -58,16 +47,20 @@ export async function createSession(
   locals: any
 ): Promise<string> {
   if (isDevMode(locals)) {
-    console.log('🔧 [DEV MODE] Using in-memory session storage');
+    console.log(`🔧 [DEV MODE] Creating in-memory session: ${sessionId}`);
     // In dev mode, use the provided sessionId as the doId
     devSessionStorage.createSession(sessionId, sessionId, audioKeys);
+    console.log(`✅ [DEV MODE] Session created, returning ID: ${sessionId}`);
     return sessionId;
   } else {
-    console.log('☁️ [PRODUCTION] Using Durable Object session storage');
+    console.log(`☁️ [PRODUCTION] Creating Durable Object session...`);
     const sessionsDO = locals.runtime.env.SECSTREAM_SESSIONS;
     // Generate a proper DO ID
     const { stub: sessionDO, sessionId: doId } = createSessionDO(sessionsDO);
+    console.log(`📝 Generated DO ID: ${doId} (length: ${doId.length})`);
+    console.log(`📝 Internal session ID: ${sessionId}`);
     await sessionDO.createSession(doId, sessionId, audioKeys);
+    console.log(`✅ [PRODUCTION] Session created, returning DO ID: ${doId}`);
     return doId;
   }
 }
