@@ -1,9 +1,9 @@
 import type { Transport } from 'secstream/client';
-import type { EncryptedSlice, SessionInfo, TrackInfo } from 'secstream';
+import type { EncryptedSlice, SessionInfo, TrackInfo } from 'secstream/client';
 import type {
   ProcessorKeyExchangeRequest as KeyExchangeRequest,
   ProcessorKeyExchangeResponse as KeyExchangeResponse
-} from 'secstream';
+} from 'secstream/client';
 
 /**
  * Transport implementation for the artist page application

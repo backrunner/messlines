@@ -21,7 +21,7 @@ export interface SessionMetadata {
  * Check if we're running in development mode
  * Uses Cloudflare-specific bindings as the primary indicator
  */
-export function isDevMode(locals: any): boolean {
+export function isDevMode(locals: App.Locals): boolean {
   // Primary check: If both DO and R2 bindings exist, we're in production
   const hasDO = !!locals.runtime?.env?.SECSTREAM_SESSIONS;
   const hasR2 = !!locals.runtime?.env?.AUDIO_BUCKET;
@@ -44,7 +44,7 @@ export function isDevMode(locals: any): boolean {
 export async function createSession(
   sessionId: string,
   audioKeys: string[],
-  locals: any
+  locals: App.Locals
 ): Promise<string> {
   if (isDevMode(locals)) {
     console.log(`🔧 [DEV MODE] Creating in-memory session: ${sessionId}`);
@@ -70,7 +70,7 @@ export async function createSession(
  */
 export async function getSessionMetadata(
   doId: string,
-  locals: any
+  locals: App.Locals
 ): Promise<SessionMetadata> {
   if (isDevMode(locals)) {
     console.log('🔧 [DEV MODE] Fetching from in-memory storage');
@@ -88,7 +88,7 @@ export async function getSessionMetadata(
  */
 export async function validateSession(
   doId: string,
-  locals: any
+  locals: App.Locals
 ): Promise<boolean> {
   if (isDevMode(locals)) {
     console.log('🔧 [DEV MODE] Validating in memory');

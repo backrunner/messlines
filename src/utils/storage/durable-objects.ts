@@ -1,3 +1,5 @@
+import type { SecStreamSession } from '../../durable-objects/SecStreamSession.js';
+
 /**
  * Validate if a string is a valid Durable Object ID (64 hex digits)
  */
@@ -11,7 +13,7 @@ function isValidDurableObjectId(id: string): boolean {
  * @param sessionId - The session ID (hex string from newUniqueId().toString())
  * @returns DO stub
  */
-export function getSessionDO(namespace: DurableObjectNamespace, sessionId: string) {
+export function getSessionDO(namespace: DurableObjectNamespace, sessionId: string): DurableObjectStub<SecStreamSession> {
   // Validate the DO ID format
   if (!isValidDurableObjectId(sessionId)) {
     console.error(`❌ Invalid Durable Object ID: "${sessionId}" (length: ${sessionId.length})`);
@@ -23,7 +25,7 @@ export function getSessionDO(namespace: DurableObjectNamespace, sessionId: strin
   // IMPORTANT: Use idFromString, not idFromName!
   // idFromName creates a different ID from the same string
   const id = namespace.idFromString(sessionId);
-  return namespace.get(id);
+  return namespace.get(id) as DurableObjectStub<SecStreamSession>;
 }
 
 /**
@@ -31,12 +33,15 @@ export function getSessionDO(namespace: DurableObjectNamespace, sessionId: strin
  * @param namespace - The DO namespace binding
  * @returns DO stub and generated session ID
  */
-export function createSessionDO(namespace: DurableObjectNamespace) {
+export function createSessionDO(namespace: DurableObjectNamespace): {
+  stub: DurableObjectStub<SecStreamSession>;
+  sessionId: string;
+} {
   // Generate a new unique ID for the session
   const id = namespace.newUniqueId();
   const sessionId = id.toString();
   return {
-    stub: namespace.get(id),
+    stub: namespace.get(id) as DurableObjectStub<SecStreamSession>,
     sessionId,
   };
 }
