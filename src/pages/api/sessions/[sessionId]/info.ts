@@ -31,7 +31,32 @@ export const GET: APIRoute = async ({ params, locals }) => {
 
     // Get the Durable Object for this session
     const sessionDO = getSessionDO(sessionsDO, sessionId);
-    const info = await sessionDO.getSessionInfo(sessionId);
+
+    // Try to get session info, handle errors with cache invalidation
+    let info;
+    try {
+      info = await sessionDO.getSessionInfo(sessionId);
+    } catch (doError: unknown) {
+      // Check if error indicates session not found or expired
+      const errorMessage = doError instanceof Error ? doError.message : String(doError);
+
+      if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
+        // Invalidate cache - session was deleted/expired in DO
+        sessionCache.markDeleted(sessionId);
+        console.warn(`⚠️ Session ${sessionId} not found or expired in DO, invalidated cache`);
+
+        return new Response(JSON.stringify({
+          error: 'Session not found or expired',
+          details: errorMessage
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+        });
+      }
+
+      // Re-throw other errors
+      throw doError;
+    }
 
     if (!info) {
       return new Response(JSON.stringify({ error: 'Session not found' }), {

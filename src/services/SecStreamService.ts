@@ -135,8 +135,40 @@ export class SecStreamService {
       console.log('✅ Multi-track playlist initialized successfully');
     } catch (error: unknown) {
       console.error('❌ Failed to initialize playlist:', error);
+
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired, will recreate on next operation');
+        // Clear session state to force recreation
+        this.resetSessionState();
+      }
+
       throw error;
     }
+  }
+
+  /**
+   * Check if error indicates session expiration
+   */
+  private isSessionExpiredError(error: unknown): boolean {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return errorMessage.includes('expired') ||
+           errorMessage.includes('not found') ||
+           errorMessage.includes('404');
+  }
+
+  /**
+   * Reset session state to allow recreation
+   */
+  private resetSessionState(): void {
+    this.currentSessionId = null;
+    this.isSessionInitialized = false;
+    this.trackMapping.clear();
+
+    // Don't destroy player/client here as they may be reusable
+    // Just clear session-specific state
+
+    console.log('🔄 Session state reset, ready for recreation');
   }
 
   /**
@@ -175,6 +207,22 @@ export class SecStreamService {
       console.log('✅ Track switched successfully');
     } catch (error: unknown) {
       console.error('❌ Failed to switch track:', error);
+
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired during track switch, reinitializing...');
+        this.resetSessionState();
+
+        // Retry once after recreating session
+        await this.initializePlaylist();
+        const trackId = this.trackMapping.get(trackIndex);
+        if (trackId) {
+          await this.player!.switchTrack(trackId, autoPlay);
+          console.log('✅ Track switched successfully after session recreation');
+          return;
+        }
+      }
+
       throw error;
     }
   }
@@ -197,6 +245,19 @@ export class SecStreamService {
       console.log('✅ Switched to next track');
     } catch (error: unknown) {
       console.error('❌ Failed to switch to next track:', error);
+
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired during next track, reinitializing...');
+        this.resetSessionState();
+
+        // Retry once after recreating session
+        await this.initializePlaylist();
+        await this.player.nextTrack(autoPlay);
+        console.log('✅ Switched to next track after session recreation');
+        return;
+      }
+
       throw error;
     }
   }
@@ -219,6 +280,19 @@ export class SecStreamService {
       console.log('✅ Switched to previous track');
     } catch (error: unknown) {
       console.error('❌ Failed to switch to previous track:', error);
+
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired during previous track, reinitializing...');
+        this.resetSessionState();
+
+        // Retry once after recreating session
+        await this.initializePlaylist();
+        await this.player.previousTrack(autoPlay);
+        console.log('✅ Switched to previous track after session recreation');
+        return;
+      }
+
       throw error;
     }
   }
@@ -382,6 +456,18 @@ export class SecStreamService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Error message:', errorMessage);
 
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired during play, reinitializing...');
+        this.resetSessionState();
+
+        // Retry once after recreating session
+        await this.initializePlaylist();
+        await this.player.play();
+        console.log('✅ Play succeeded after session recreation');
+        return;
+      }
+
       if (errorMessage.includes('AudioContext') || errorMessage.includes('not allowed')) {
         console.warn('⚠️ Autoplay policy error detected in SecStreamService');
         // Dispatch suspended event
@@ -427,6 +513,19 @@ export class SecStreamService {
       await this.player.seekToTime(time);
     } catch (error: unknown) {
       console.error('❌ SecStream seek failed:', error);
+
+      // Check if error indicates session expired
+      if (this.isSessionExpiredError(error)) {
+        console.warn('⏰ Session expired during seek, reinitializing...');
+        this.resetSessionState();
+
+        // Retry once after recreating session
+        await this.initializePlaylist();
+        await this.player.seekToTime(time);
+        console.log('✅ Seek succeeded after session recreation');
+        return;
+      }
+
       throw error;
     }
   }

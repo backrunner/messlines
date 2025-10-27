@@ -22,6 +22,7 @@ interface CachedSessionMetadata {
   cachedAt: number;
   isDeleted?: boolean; // Soft-delete marker for invalidated sessions
   version?: number; // Version for cache invalidation
+  // lastAccessedAt removed - sessions use absolute expiration
 }
 
 interface CacheEntry {

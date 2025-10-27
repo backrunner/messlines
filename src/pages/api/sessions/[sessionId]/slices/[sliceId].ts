@@ -48,10 +48,18 @@ export const GET: APIRoute = async ({ params, url, locals }) => {
       if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
         // Invalidate cache - session was deleted/expired in DO
         sessionCache.markDeleted(sessionId);
-        console.warn(`⚠️ Session ${sessionId} not found in DO, invalidated cache`);
+        console.warn(`⚠️ Session ${sessionId} not found or expired in DO, invalidated cache`);
+
+        return new Response(JSON.stringify({
+          error: 'Session not found or expired',
+          details: errorMessage
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', 'Connection': 'keep-alive' }
+        });
       }
 
-      // Re-throw error
+      // Re-throw other errors
       throw doError;
     }
 

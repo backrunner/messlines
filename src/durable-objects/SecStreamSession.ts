@@ -5,6 +5,17 @@ import { AudioFileHandler } from '../utils/secstream';
 import type { ProcessorKeyExchangeRequest, ProcessorKeyExchangeResponse } from 'secstream/server';
 
 /**
+ * Custom error for expired sessions
+ * Client should catch this and create a new session
+ */
+export class SessionExpiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SessionExpiredError';
+  }
+}
+
+/**
  * Durable Object for persisting secstream session state
  * Each session gets its own DO instance that persists across worker invocations
  *
@@ -16,10 +27,10 @@ import type { ProcessorKeyExchangeRequest, ProcessorKeyExchangeResponse } from '
  * - When DO hibernates, SessionManager is evicted (saving memory/costs)
  *
  * Lifecycle:
- * - Sessions expire after 2 hours of inactivity
- * - Automatic cleanup via optimized alarms that fire ONLY at expiration time
- * - Alarm is rescheduled whenever session is accessed, minimizing wall-clock time
- * - Storage is deleted to avoid billing
+ * - Sessions expire after 2 hours from creation (absolute timeout)
+ * - Automatic cleanup via alarms that fire at expiration time
+ * - No storage writes during playback (zero wall-clock time overhead)
+ * - Storage is deleted on expiration to avoid billing
  */
 export class SecStreamSession extends DurableObject {
   // Transient: Not persisted, recreated on-demand
@@ -32,20 +43,19 @@ export class SecStreamSession extends DurableObject {
     sessionId: string | null;  // The internal SessionManager ID (for secstream calls)
     audioKeys: string[];  // R2 keys for audio files (used to fetch on-demand)
     createdAt: number;
-    lastAccessedAt: number;
+    // lastAccessedAt removed - sessions use absolute expiration (createdAt + TIMEOUT)
   } = {
     doId: null,
     sessionId: null,
     audioKeys: [],
     createdAt: 0,
-    lastAccessedAt: 0,
   };
 
   // Rate limiting state (transient, not persisted)
   private sliceRequestTimestamps: number[] = [];
   private keyExchangeTimestamps: number[] = [];
 
-  // Session expires after 2 hours of inactivity
+  // Session expires after 2 hours from creation (absolute timeout)
   private readonly SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
   // Rate limiting configuration
@@ -60,7 +70,7 @@ export class SecStreamSession extends DurableObject {
     super(ctx, env);
     this.audioHandler = new AudioFileHandler();
 
-    // Initialize from storage and set up alarm
+    // Initialize from storage
     // blockConcurrencyWhile ensures this completes before handling any requests
     this.ctx.blockConcurrencyWhile(async () => {
       // Load session data from storage if it exists
@@ -68,10 +78,27 @@ export class SecStreamSession extends DurableObject {
       if (stored) {
         this.sessionData = stored;
         console.log(`📂 Loaded session data from storage: DO ${stored.doId}`);
-      }
 
-      // Set up cleanup alarm if not already set
-      await this.initializeAlarm();
+        // Check if session has expired (absolute timeout from creation)
+        const now = Date.now();
+        const age = now - stored.createdAt;
+        if (age >= this.SESSION_TIMEOUT_MS) {
+          console.log(`⏰ Session expired (age: ${(age / 1000 / 60).toFixed(1)} min), cleaning up...`);
+          await this.destroySession();
+          return;
+        }
+
+        // Session is valid, ensure alarm is set for expiration
+        const expirationTime = stored.createdAt + this.SESSION_TIMEOUT_MS;
+        const alarmTime = await this.ctx.storage.getAlarm();
+        if (alarmTime === null || Math.abs(alarmTime - expirationTime) > 1000) {
+          // Alarm missing or incorrect, set it
+          await this.ctx.storage.setAlarm(expirationTime);
+          console.log(`⏰ Set alarm for ${new Date(expirationTime).toISOString()}`);
+        } else {
+          console.log(`⏰ Existing alarm confirmed: ${new Date(alarmTime).toISOString()}`);
+        }
+      }
     });
   }
 
@@ -203,47 +230,30 @@ export class SecStreamSession extends DurableObject {
 
   /**
    * Initialize cleanup alarm
-   * Sets alarm to fire exactly when session expires (lastAccessedAt + SESSION_TIMEOUT_MS)
-   * This minimizes wall-clock time by only waking DO once at expiration
+   * Sets alarm to fire when session expires (now + SESSION_TIMEOUT_MS)
    */
   private async initializeAlarm() {
-    // Calculate expiration time based on last access
-    const expirationTime = this.sessionData.lastAccessedAt + this.SESSION_TIMEOUT_MS;
-    const timeUntilExpiry = expirationTime - Date.now();
+    const now = Date.now();
+    const expirationTime = now + this.SESSION_TIMEOUT_MS;
 
-    // Only set alarm if session hasn't expired yet
-    if (timeUntilExpiry > 0) {
-      await this.ctx.storage.setAlarm(expirationTime);
-      console.log(`⏰ Alarm set for session expiration in ${(timeUntilExpiry / 1000 / 60).toFixed(1)} minutes (${new Date(expirationTime).toISOString()})`);
-    } else {
-      // Session already expired, clean up immediately
-      console.log(`🗑️ Session already expired, cleaning up immediately`);
-      await this.destroySession();
-    }
+    await this.ctx.storage.setAlarm(expirationTime);
+
+    console.log(`⏰ Initial alarm set for ${new Date(expirationTime).toISOString()} (${(this.SESSION_TIMEOUT_MS / 1000 / 60).toFixed(0)} minutes from now)`);
   }
 
   /**
-   * Alarm handler - called when session expires
-   * This is optimized to fire only once at the exact expiration time
-   * Minimizes wall-clock time by avoiding periodic checks
+   * Alarm handler - called when session expires (absolute timeout from creation)
+   * Session uses absolute expiration, so when alarm fires, always clean up
    */
   async alarm() {
     const now = Date.now();
-    const idleTime = now - this.sessionData.lastAccessedAt;
+    const age = this.sessionData.createdAt ? now - this.sessionData.createdAt : 0;
 
-    console.log(`⏰ Alarm triggered for DO ${this.sessionData.doId}, idle for ${(idleTime / 1000 / 60).toFixed(1)} minutes`);
+    console.log(`⏰ Alarm triggered for DO ${this.sessionData.doId} (age: ${(age / 1000 / 60).toFixed(1)} min), cleaning up...`);
 
-    // Check if session has actually expired (safety check)
-    if (idleTime >= this.SESSION_TIMEOUT_MS) {
-      console.log(`🗑️ DO ${this.sessionData.doId} expired, cleaning up...`);
-      await this.destroySession();
-    } else {
-      // Edge case: session was accessed shortly before alarm fired
-      // Reschedule alarm for the new expiration time
-      const newExpirationTime = this.sessionData.lastAccessedAt + this.SESSION_TIMEOUT_MS;
-      await this.ctx.storage.setAlarm(newExpirationTime);
-      console.log(`⏰ Session accessed recently, rescheduled alarm for ${new Date(newExpirationTime).toISOString()}`);
-    }
+    // Alarm fired = session expired (absolute timeout)
+    // Always clean up, no need to check lastAccessedAt
+    await this.destroySession();
   }
 
   /**
@@ -258,7 +268,6 @@ export class SecStreamSession extends DurableObject {
       sessionId: null,
       audioKeys: [],
       createdAt: 0,
-      lastAccessedAt: 0,
     };
 
     // Delete alarm first (required before deleteAll if alarms are used)
@@ -274,18 +283,38 @@ export class SecStreamSession extends DurableObject {
   }
 
   /**
-   * Update last accessed timestamp and reschedule alarm
-   * This ensures the alarm always fires at the correct expiration time
+   * Check if session has expired (absolute timeout from creation)
+   * Returns true if expired
    */
-  private async touchSession() {
-    const now = Date.now();
-    this.sessionData.lastAccessedAt = now;
-    await this.ctx.storage.put('sessionData', this.sessionData);
+  private isSessionExpired(): boolean {
+    if (!this.sessionData.createdAt) {
+      return true; // No session data = expired
+    }
 
-    // Reschedule alarm for new expiration time
-    const newExpirationTime = now + this.SESSION_TIMEOUT_MS;
-    await this.ctx.storage.setAlarm(newExpirationTime);
-    console.log(`⏰ Session accessed, alarm rescheduled for ${new Date(newExpirationTime).toISOString()}`);
+    const now = Date.now();
+    const age = now - this.sessionData.createdAt;
+    return age >= this.SESSION_TIMEOUT_MS;
+  }
+
+  /**
+   * Throw error if session is expired
+   * This forces client to create a new session
+   */
+  private checkSessionExpired(doId: string): void {
+    if (this.isSessionExpired()) {
+      // Session expired - client should create a new one
+      throw new SessionExpiredError(`Session ${doId} has expired. Please create a new session.`);
+    }
+  }
+
+  /**
+   * Touch session (no-op)
+   * Sessions use absolute expiration (createdAt + TIMEOUT), no need to extend
+   * Client creates new session on each page load, doesn't reuse old sessions
+   */
+  private touchSession() {
+    // No operation needed - sessions use absolute timeout
+    // This method is kept for API compatibility but does nothing
   }
 
   /**
@@ -306,15 +335,18 @@ export class SecStreamSession extends DurableObject {
       sessionId: null,  // Will be set when SessionManager is created (during key exchange)
       audioKeys,  // Store R2 keys for on-demand fetching
       createdAt: now,
-      lastAccessedAt: now,
     };
 
     // Persist to storage
     await this.ctx.storage.put('sessionData', this.sessionData);
 
-    console.log(`✅ Created lightweight session in DO ${doId} with ${audioKeys.length} audio keys`);
-    console.log(`📝 Audio keys stored for lazy loading: ${audioKeys.join(', ')}`);
-    console.log(`💾 Memory footprint: ~${JSON.stringify(this.sessionData).length} bytes (vs ~50MB if audio was loaded)`);
+    // Set alarm for absolute expiration (createdAt + TIMEOUT)
+    await this.initializeAlarm();
+
+    console.log(`✅ Created session in DO ${doId} with ${audioKeys.length} audio keys`);
+    console.log(`📝 Audio keys: ${audioKeys.join(', ')}`);
+    console.log(`💾 Memory footprint: ~${JSON.stringify(this.sessionData).length} bytes`);
+    console.log(`⏰ Session will expire at ${new Date(now + this.SESSION_TIMEOUT_MS).toISOString()}`);
 
     // Return the DO ID for client routing
     return doId;
@@ -330,6 +362,9 @@ export class SecStreamSession extends DurableObject {
     request: ProcessorKeyExchangeRequest<unknown>,
     trackId?: string
   ): Promise<ProcessorKeyExchangeResponse<unknown, unknown>> {
+    // Check if session has expired
+    this.checkSessionExpired(doId);
+
     // Verify DO ID matches (sessionData loaded in constructor)
     if (this.sessionData.doId !== doId) {
       throw new Error(`Session ${doId} not found in this Durable Object (has: ${this.sessionData.doId})`);
@@ -340,8 +375,8 @@ export class SecStreamSession extends DurableObject {
       throw new Error('Too many requests. Please try again later.');
     }
 
-    // Update last accessed time
-    await this.touchSession();
+    // Update last accessed time (non-blocking, uses ctx.waitUntil)
+    this.touchSession();
 
     // Ensure SessionManager is initialized (fetches audio from R2 if needed)
     const manager = await this.ensureSessionManager();
@@ -363,13 +398,16 @@ export class SecStreamSession extends DurableObject {
    * @param doId - The Durable Object ID (for routing verification)
    */
   async getSessionInfo(doId: string) {
+    // Check if session has expired
+    this.checkSessionExpired(doId);
+
     // Verify DO ID matches (sessionData loaded in constructor)
     if (this.sessionData.doId !== doId) {
       throw new Error(`Session ${doId} not found in this Durable Object (has: ${this.sessionData.doId})`);
     }
 
-    // Update last accessed time
-    await this.touchSession();
+    // Update last accessed time (non-blocking, uses ctx.waitUntil)
+    this.touchSession();
 
     // Ensure SessionManager is initialized (fetches audio from R2 if needed)
     const manager = await this.ensureSessionManager();
@@ -391,6 +429,9 @@ export class SecStreamSession extends DurableObject {
    * @param doId - The Durable Object ID (for routing verification)
    */
   async getSlice(doId: string, sliceId: string, trackId?: string) {
+    // Check if session has expired
+    this.checkSessionExpired(doId);
+
     // Verify DO ID matches (sessionData loaded in constructor)
     if (this.sessionData.doId !== doId) {
       throw new Error(`Session ${doId} not found in this Durable Object (has: ${this.sessionData.doId})`);
@@ -401,8 +442,8 @@ export class SecStreamSession extends DurableObject {
       throw new Error('Too many requests. Please try again later.');
     }
 
-    // Update last accessed time
-    await this.touchSession();
+    // Update last accessed time (non-blocking, uses ctx.waitUntil)
+    this.touchSession();
 
     // Ensure SessionManager is initialized (fetches audio from R2 if needed)
     const manager = await this.ensureSessionManager();
