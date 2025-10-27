@@ -71,7 +71,8 @@ export const POST: APIRoute = async ({ params, request, url, locals }) => {
 
     // Perform key exchange in WORKER (not DO!)
     const response = await globalWorkerSessionManager.handleKeyExchange(
-      cachedSession.sessionId,  // Use internal sessionId
+      cachedSession.doId,  // Use DO ID for client routing (NOT internal sessionId)
+      cachedSession.sessionId,  // Pass internal sessionId separately
       cachedSession.audioKeys,
       keyExchangeRequest,
       bucket,

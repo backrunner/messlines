@@ -93,35 +93,38 @@ export class WorkerSessionManager {
   /**
    * Handle key exchange
    * Session metadata is retrieved from storage, but audio processing happens in worker
+   * @param doId - Durable Object ID (returned to client for routing)
+   * @param internalSessionId - Internal session ID (used internally for SessionManager)
    */
   async handleKeyExchange<TRequestData = unknown, TResponseData = unknown>(
-    sessionId: string,
+    doId: string,
+    internalSessionId: string,
     audioKeys: string[],
     request: ProcessorKeyExchangeRequest<TRequestData>,
     bucket?: R2Bucket,
     trackId?: string
   ): Promise<ProcessorKeyExchangeResponse<TResponseData, SessionInfo>> {
-    const manager = await this.ensureSessionManager(sessionId, audioKeys, bucket);
+    const manager = await this.ensureSessionManager(internalSessionId, audioKeys, bucket);
 
     // Get the internal session ID for this external session ID
-    const internalSessionId = this.sessionIdMapping.get(sessionId);
-    if (!internalSessionId) {
-      throw new Error(`Session mapping not found for ${sessionId}`);
+    const storedInternalSessionId = this.sessionIdMapping.get(internalSessionId);
+    if (!storedInternalSessionId) {
+      throw new Error(`Session mapping not found for ${internalSessionId}`);
     }
 
     // Perform key exchange in worker using internal session ID
-    const response = await manager.handleKeyExchange<TRequestData, TResponseData>(internalSessionId, request, trackId);
+    const response = await manager.handleKeyExchange<TRequestData, TResponseData>(storedInternalSessionId, request, trackId);
 
-    // Replace internal session ID with external session ID in the response
-    // so the client uses the correct ID for subsequent requests
+    // Replace internal session ID with DO ID in the response
+    // so the client uses the DO ID for subsequent requests
     if (response.sessionInfo) {
       response.sessionInfo = {
         ...response.sessionInfo,
-        sessionId: sessionId, // Use external session ID
+        sessionId: doId, // Use DO ID for client routing
       };
     }
 
-    console.log(`🔑 Key exchange completed in worker for session ${sessionId}${trackId ? ` (track: ${trackId})` : ''}`);
+    console.log(`🔑 Key exchange completed in worker for DO ${doId} (internal: ${internalSessionId})${trackId ? ` (track: ${trackId})` : ''}`);
     return response;
   }
 
