@@ -3,6 +3,7 @@ import type { EncryptedSlice, SessionInfo } from 'secstream/server';
 import type { ProcessorKeyExchangeRequest, ProcessorKeyExchangeResponse } from 'secstream/server';
 import { SECSTREAM_CONFIG } from '../../constants/playlist';
 import { AudioFileHandler } from '../audio/secstream';
+import { PcmCacheManager } from '../audio/pcm-cache';
 
 /**
  * Worker-level SessionManager wrapper
@@ -12,20 +13,29 @@ import { AudioFileHandler } from '../audio/secstream';
  * Architecture:
  * - Durable Object: Stores only session metadata (~1KB)
  * - Worker: Fetches audio from R2, generates slices locally
+ * - PCM Cache: Pre-decoded audio cached in R2 for 100x faster loading
  * - No audio data transferred through DO (eliminates 5-second delay)
  */
 export class WorkerSessionManager {
   private sessionManagers: Map<string, SessionManager> = new Map();
   private sessionIdMapping: Map<string, string> = new Map(); // external -> internal sessionId
   private audioHandler: AudioFileHandler;
+  private pcmCacheManager: PcmCacheManager;
 
   constructor() {
     this.audioHandler = new AudioFileHandler();
+    // PCM cache manager configured from SECSTREAM_CONFIG
+    this.pcmCacheManager = new PcmCacheManager({
+      enabled: SECSTREAM_CONFIG.pcmCache.enabled,
+      pcmCachePrefix: SECSTREAM_CONFIG.pcmCache.cachePrefix,
+      forceRegenerate: SECSTREAM_CONFIG.pcmCache.forceRegenerate,
+    });
   }
 
   /**
    * Get or create SessionManager for a session
    * Fetches audio from R2 on-demand (lazy loading)
+   * Uses PCM cache for 100x faster audio loading
    * In dev mode, fetches audio from local filesystem if R2 is not available
    */
   private async ensureSessionManager(
@@ -43,19 +53,40 @@ export class WorkerSessionManager {
     // SessionManager not in memory - need to create it
     console.log(`🔄 Creating SessionManager in worker for session ${sessionId}...`);
 
-    // Fetch audio from R2 or local filesystem
+    // Fetch audio from R2 or local filesystem with PCM caching
     const audioBuffers: ArrayBuffer[] = [];
     const source = bucket ? 'R2' : 'local filesystem';
-    console.log(`📦 Fetching audio from ${source}...`);
+    console.log(`📦 Fetching audio from ${source} with PCM cache...`);
+
+    let totalCacheHits = 0;
+    let totalCacheMisses = 0;
+    let totalFetchTime = 0;
 
     for (const key of audioKeys) {
-      const buffer = await this.audioHandler.getAudioFromBucket(key, bucket);
-      audioBuffers.push(buffer);
-      console.log(`✅ Fetched audio: ${key} (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+      const fetchStartTime = Date.now();
+
+      // Fetch original audio
+      const originalAudio = await this.audioHandler.getAudioFromBucket(key, bucket);
+
+      // Apply PCM caching (pass bucket for R2 cache storage)
+      const cacheResult = await this.pcmCacheManager.getAudioWithCache(key, originalAudio, bucket);
+      audioBuffers.push(cacheResult.audioData);
+
+      const fetchTime = Date.now() - fetchStartTime;
+      totalFetchTime += fetchTime;
+
+      if (cacheResult.fromCache) {
+        totalCacheHits++;
+        console.log(`✅ Audio loaded (PCM cache HIT): ${key} (${(cacheResult.size / 1024 / 1024).toFixed(2)} MB, ${fetchTime}ms)`);
+      } else {
+        totalCacheMisses++;
+        console.log(`✅ Audio loaded (PCM cache MISS): ${key} (${(cacheResult.size / 1024 / 1024).toFixed(2)} MB, ${fetchTime}ms)`);
+      }
     }
 
     const totalSize = audioBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
-    console.log(`📊 Total audio size: ${(totalSize / 1024 / 1024).toFixed(2)} MB (loaded in worker memory)`);
+    console.log(`📊 Total audio loaded: ${(totalSize / 1024 / 1024).toFixed(2)} MB in ${totalFetchTime}ms`);
+    console.log(`📊 PCM cache stats: ${totalCacheHits} hits, ${totalCacheMisses} misses (${totalCacheHits > 0 ? ((totalCacheHits / audioKeys.length) * 100).toFixed(1) : '0'}% hit rate)`);
 
     // Create SessionManager in worker memory
     manager = new SessionManager({

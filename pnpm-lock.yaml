@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@astrojs/cloudflare':
         specifier: ^12.6.10
-        version: 12.6.10(@types/node@24.8.1)(astro@5.14.6(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3))
+        version: 12.6.10(@types/node@24.8.1)(astro@5.15.2(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3))
       '@astrojs/react':
-        specifier: ^4.4.0
-        version: 4.4.0(@types/node@24.8.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        specifier: ^4.4.1
+        version: 4.4.1(@types/node@24.8.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@iconify/react':
         specifier: ^6.0.2
         version: 6.0.2(react@19.2.0)
@@ -39,8 +39,8 @@ importers:
         specifier: ^4.2.2
         version: 4.2.2
       astro:
-        specifier: ^5.14.6
-        version: 5.14.6(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3)
+        specifier: ^5.15.2
+        version: 5.15.2(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3)
       react:
         specifier: ^19.2.0
         version: 19.2.0
@@ -48,12 +48,12 @@ importers:
         specifier: ^19.2.0
         version: 19.2.0(react@19.2.0)
       secstream:
-        specifier: ^0.1.6
-        version: 0.1.6
+        specifier: ^0.2.1
+        version: 0.2.1
     devDependencies:
       wrangler:
-        specifier: ^4.45.0
-        version: 4.45.0(@cloudflare/workers-types@4.20251011.0)
+        specifier: ^4.45.1
+        version: 4.45.1(@cloudflare/workers-types@4.20251011.0)
 
 packages:
 
@@ -75,8 +75,8 @@ packages:
     resolution: {integrity: sha512-q8VwfU/fDZNoDOf+r7jUnMC2//H2l0TuQ6FkGJL8vD8nw/q5KiL3DS1KKBI3QhI9UQhpJ5dc7AtqfbXWuOgLCQ==}
     engines: {node: 18.20.8 || ^20.3.0 || >=22.0.0}
 
-  '@astrojs/react@4.4.0':
-    resolution: {integrity: sha512-RzblkVImAFdV1C0AWsSWzS70Z0FMtW2p0XXkNYu3QePfyVJta3JIy8m8jY8271etaCZtpFjsE2UaiHGZIBm6nw==}
+  '@astrojs/react@4.4.1':
+    resolution: {integrity: sha512-3M3RE+KYlbvov+uvn7SzgcO/zoMiK16Glwo9Ic0ZOJ0B+4PSULMeniwtyQg1m1Eq5k4BbqpIuC18lA2uzQSflQ==}
     engines: {node: 18.20.8 || ^20.3.0 || >=22.0.0}
     peerDependencies:
       '@types/react': ^17.0.50 || ^18.0.21 || ^19.0.0
@@ -576,6 +576,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@eshaz/web-worker@1.2.2':
+    resolution: {integrity: sha512-WxXiHFmD9u/owrzempiDlBB1ZYqiLnm9s6aPc8AlFQalq2tKmqdmMr9GXOupDgzXtqnBipj8Un0gkIm7Sjf8mw==}
+
   '@iconify/react@6.0.2':
     resolution: {integrity: sha512-SMmC2sactfpJD427WJEDN6PMyznTFMhByK9yLW0gOTtnjzzbsi/Ke/XqsumsavFPwNiXs8jSiYeZTmLCLwO+Fg==}
     peerDependencies:
@@ -1067,6 +1070,15 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
+  '@wasm-audio-decoders/common@9.0.7':
+    resolution: {integrity: sha512-WRaUuWSKV7pkttBygml/a6dIEpatq2nnZGFIoPTc5yPLkxL6Wk4YaslPM98OPQvWacvNZ+Py9xROGDtrFBDzag==}
+
+  '@wasm-audio-decoders/flac@0.2.10':
+    resolution: {integrity: sha512-YfcyoD2rYRBa6ffawZKNi5qvV5HArJmNmuMVUPoutuZ2hhGi6WNSWIzgvbROGmPbFivLL764Am7xxJENWJDhjw==}
+
+  '@wasm-audio-decoders/ogg-vorbis@0.1.20':
+    resolution: {integrity: sha512-zaQPasU5usRjUDXtXOHYED5tfkR4QMXd+EH3Nrz1+4+M5pCsdD+s9YxJqb0oqnTyRu/KUujOmu5Z/m/NT47vwg==}
+
   acorn-walk@8.3.2:
     resolution: {integrity: sha512-cjkyv4OtNCIeqhHrfS81QWXoCBPExR/J62oyEqepVw8WaQeSqpW2uhuLPh1m9eWhDuOo/jUXVTlifvesOWp/4A==}
     engines: {node: '>=0.4.0'}
@@ -1113,8 +1125,8 @@ packages:
   array-iterate@2.0.1:
     resolution: {integrity: sha512-I1jXZMjAgCMmxT4qxXfPXa6SthSoE8h6gkSI9BGGNv8mP8G/v0blc+qFnZu6K42vTOiuME596QaLO0TP3Lk0xg==}
 
-  astro@5.14.6:
-    resolution: {integrity: sha512-MSdjKt2W2a56x868DqDWgbfw4D689/8EGhHG4465h7eivTI237u1aBx4iJvgI6WfgdUE61+coAvMjUkEvOWbpA==}
+  astro@5.15.2:
+    resolution: {integrity: sha512-xQQ+PiYJ7WpUJrHJpAb52TQAUCFmSR8lAtQr3tFfSIZoTQiEMFx3HITJ01t3eDUpHjja8J6JcYqgAhr9xygKQg==}
     engines: {node: 18.20.8 || ^20.3.0 || >=22.0.0, npm: '>=9.6.5', pnpm: '>=7.1.0'}
     hasBin: true
 
@@ -1192,6 +1204,9 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  codec-parser@2.5.0:
+    resolution: {integrity: sha512-Ru9t80fV8B0ZiixQl8xhMTLru+dzuis/KQld32/x5T/+3LwZb0/YvQdSKytX9JqCnRdiupvAvyYJINKrXieziQ==}
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -1645,6 +1660,9 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  mpg123-decoder@1.0.3:
+    resolution: {integrity: sha512-+fjxnWigodWJm3+4pndi+KUg9TBojgn31DPk85zEsim7C6s0X5Ztc/hQYdytXkwuGXH+aB0/aEkG40Emukv6oQ==}
+
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
     engines: {node: '>=10'}
@@ -1833,8 +1851,8 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
-  secstream@0.1.6:
-    resolution: {integrity: sha512-iDGTtWnfcM6KDG0slwt50/u0ey40gtJxzqupSO3Op2ZzYoFPfOCoXbkH4dffaODfeEHsoXdrYTqkRYX7HyuUJQ==}
+  secstream@0.2.1:
+    resolution: {integrity: sha512-Xc4GGFyygmpwA5QpgsIqNKHroQeD92QQ9tKmom22a9pqo252bZyFTMFUL15EJPJRpjEOzvV818VMZKNyBTHi8g==}
     engines: {node: '>=18', pnpm: '>=10.0.0'}
 
   semver@6.3.1:
@@ -1859,6 +1877,9 @@ packages:
 
   simple-swizzle@0.2.4:
     resolution: {integrity: sha512-nAu1WFPQSMNr2Zn9PGSZK9AGn4t/y97lEm+MXTtUDwfP0ksAIX4nO+6ruD9Jwut4C49SB1Ws+fbXsm/yScWOHw==}
+
+  simple-yenc@1.0.4:
+    resolution: {integrity: sha512-5gvxpSd79e9a3V4QDYUqnqxeD4HGlhCakVpb6gMnDD7lexJggSBJRBO5h52y/iJrdXRilX9UCuDaIJhSWm5OWw==}
 
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
@@ -2114,6 +2135,46 @@ packages:
       yaml:
         optional: true
 
+  vite@6.4.1:
+    resolution: {integrity: sha512-+Oxm7q9hDoLMyJOYfUYBuHQo+dkAloi33apOPP56pzj+vsdJDzr+j1NISE5pyaAuKL4A3UD34qd0lx5+kfKp2g==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
+    hasBin: true
+    peerDependencies:
+      '@types/node': ^18.0.0 || ^20.0.0 || >=22.0.0
+      jiti: '>=1.21.0'
+      less: '*'
+      lightningcss: ^1.21.0
+      sass: '*'
+      sass-embedded: '*'
+      stylus: '*'
+      sugarss: '*'
+      terser: ^5.16.0
+      tsx: ^4.8.1
+      yaml: ^2.4.2
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+      jiti:
+        optional: true
+      less:
+        optional: true
+      lightningcss:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
+      stylus:
+        optional: true
+      sugarss:
+        optional: true
+      terser:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
+        optional: true
+
   vitefu@1.1.1:
     resolution: {integrity: sha512-B/Fegf3i8zh0yFbpzZ21amWzHmuNlLlmJT6n7bu5e+pCHUKQIfXSYokrqOBGEMMe9UG2sostKQF9mml/vYaWJQ==}
     peerDependencies:
@@ -2156,8 +2217,8 @@ packages:
       '@cloudflare/workers-types':
         optional: true
 
-  wrangler@4.45.0:
-    resolution: {integrity: sha512-2qM6bHw8l7r89Z9Y5A7Wn4L9U+dFoLjYgEUVpqy7CcmXpppL3QIYqU6rU5lre7/SRzBuPu/H93Vwfh538gZ3iw==}
+  wrangler@4.45.1:
+    resolution: {integrity: sha512-SmmbDl6NUkv6mHT8/Scb09lvxXy0Y2hD98oZHswCysrYbs4JW5LP1eTuroE23Z2jK75D7TEzv2MXmwcDIytxhg==}
     engines: {node: '>=18.0.0'}
     hasBin: true
     peerDependencies:
@@ -2232,12 +2293,12 @@ packages:
 
 snapshots:
 
-  '@astrojs/cloudflare@12.6.10(@types/node@24.8.1)(astro@5.14.6(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3))':
+  '@astrojs/cloudflare@12.6.10(@types/node@24.8.1)(astro@5.15.2(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3))':
     dependencies:
       '@astrojs/internal-helpers': 0.7.4
       '@astrojs/underscore-redirects': 1.0.0
       '@cloudflare/workers-types': 4.20251011.0
-      astro: 5.14.6(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3)
+      astro: 5.15.2(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3)
       tinyglobby: 0.2.15
       vite: 6.4.0(@types/node@24.8.1)
       wrangler: 4.41.0(@cloudflare/workers-types@4.20251011.0)
@@ -2290,15 +2351,15 @@ snapshots:
     dependencies:
       prismjs: 1.30.0
 
-  '@astrojs/react@4.4.0(@types/node@24.8.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@astrojs/react@4.4.1(@types/node@24.8.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@types/react': 19.2.2
       '@types/react-dom': 19.2.2(@types/react@19.2.2)
-      '@vitejs/plugin-react': 4.7.0(vite@6.4.0(@types/node@24.8.1))
+      '@vitejs/plugin-react': 4.7.0(vite@6.4.1(@types/node@24.8.1))
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
       ultrahtml: 1.6.0
-      vite: 6.4.0(@types/node@24.8.1)
+      vite: 6.4.1(@types/node@24.8.1)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -2652,6 +2713,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.4':
     optional: true
+
+  '@eshaz/web-worker@1.2.2': {}
 
   '@iconify/react@6.0.2(react@19.2.0)':
     dependencies:
@@ -3052,7 +3115,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.0(@types/node@24.8.1))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@24.8.1))':
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.4)
@@ -3060,9 +3123,24 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.0(@types/node@24.8.1)
+      vite: 6.4.1(@types/node@24.8.1)
     transitivePeerDependencies:
       - supports-color
+
+  '@wasm-audio-decoders/common@9.0.7':
+    dependencies:
+      '@eshaz/web-worker': 1.2.2
+      simple-yenc: 1.0.4
+
+  '@wasm-audio-decoders/flac@0.2.10':
+    dependencies:
+      '@wasm-audio-decoders/common': 9.0.7
+      codec-parser: 2.5.0
+
+  '@wasm-audio-decoders/ogg-vorbis@0.1.20':
+    dependencies:
+      '@wasm-audio-decoders/common': 9.0.7
+      codec-parser: 2.5.0
 
   acorn-walk@8.3.2: {}
 
@@ -3093,7 +3171,7 @@ snapshots:
 
   array-iterate@2.0.1: {}
 
-  astro@5.14.6(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3):
+  astro@5.15.2(@types/node@24.8.1)(rollup@4.52.5)(typescript@5.9.3):
     dependencies:
       '@astrojs/compiler': 2.13.0
       '@astrojs/internal-helpers': 0.7.4
@@ -3127,7 +3205,6 @@ snapshots:
       http-cache-semantics: 4.2.0
       import-meta-resolve: 4.2.0
       js-yaml: 4.1.0
-      kleur: 4.1.5
       magic-string: 0.30.19
       magicast: 0.3.5
       mrmime: 2.0.1
@@ -3135,6 +3212,7 @@ snapshots:
       p-limit: 6.2.0
       p-queue: 8.1.1
       package-manager-detector: 1.4.1
+      picocolors: 1.1.1
       picomatch: 4.0.3
       prompts: 2.4.2
       rehype: 13.0.2
@@ -3149,8 +3227,8 @@ snapshots:
       unist-util-visit: 5.0.0
       unstorage: 1.17.1
       vfile: 6.0.3
-      vite: 6.4.0(@types/node@24.8.1)
-      vitefu: 1.1.1(vite@6.4.0(@types/node@24.8.1))
+      vite: 6.4.1(@types/node@24.8.1)
+      vitefu: 1.1.1(vite@6.4.1(@types/node@24.8.1))
       xxhash-wasm: 1.1.0
       yargs-parser: 21.1.1
       yocto-spinner: 0.2.3
@@ -3254,6 +3332,8 @@ snapshots:
   clone@2.1.2: {}
 
   clsx@2.1.1: {}
+
+  codec-parser@2.5.0: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -3963,6 +4043,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  mpg123-decoder@1.0.3:
+    dependencies:
+      '@wasm-audio-decoders/common': 9.0.7
+
   mrmime@2.0.1: {}
 
   ms@2.1.3: {}
@@ -4202,9 +4286,12 @@ snapshots:
 
   scheduler@0.27.0: {}
 
-  secstream@0.1.6:
+  secstream@0.2.1:
     dependencies:
+      '@wasm-audio-decoders/flac': 0.2.10
+      '@wasm-audio-decoders/ogg-vorbis': 0.1.20
       fflate: 0.8.2
+      mpg123-decoder: 1.0.3
       nanoid: 5.1.6
 
   semver@6.3.1: {}
@@ -4281,6 +4368,8 @@ snapshots:
   simple-swizzle@0.2.4:
     dependencies:
       is-arrayish: 0.3.4
+
+  simple-yenc@1.0.4: {}
 
   sisteransi@1.0.5: {}
 
@@ -4472,9 +4561,21 @@ snapshots:
       '@types/node': 24.8.1
       fsevents: 2.3.3
 
-  vitefu@1.1.1(vite@6.4.0(@types/node@24.8.1)):
+  vite@6.4.1(@types/node@24.8.1):
+    dependencies:
+      esbuild: 0.25.11
+      fdir: 6.5.0(picomatch@4.0.3)
+      picomatch: 4.0.3
+      postcss: 8.5.6
+      rollup: 4.52.5
+      tinyglobby: 0.2.15
     optionalDependencies:
-      vite: 6.4.0(@types/node@24.8.1)
+      '@types/node': 24.8.1
+      fsevents: 2.3.3
+
+  vitefu@1.1.1(vite@6.4.1(@types/node@24.8.1)):
+    optionalDependencies:
+      vite: 6.4.1(@types/node@24.8.1)
 
   wasm-feature-detect@1.8.0: {}
 
@@ -4519,7 +4620,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  wrangler@4.45.0(@cloudflare/workers-types@4.20251011.0):
+  wrangler@4.45.1(@cloudflare/workers-types@4.20251011.0):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.4.0
       '@cloudflare/unenv-preset': 2.7.8(unenv@2.0.0-rc.21)(workerd@1.20251011.0)

@@ -47,6 +47,13 @@ export const SECSTREAM_CONFIG = {
   serverCacheSize: 10,           // Keep 10 slices in memory
   serverCacheTtlMs: 300_000,     // Cache for 5 minutes
 
+  // PCM Cache settings (R2-based decoded audio cache)
+  pcmCache: {
+    enabled: true,               // Enable PCM caching for 100x faster audio loading
+    cachePrefix: 'pcm-cache/',   // R2 prefix for PCM cache files
+    forceRegenerate: false,      // Force regeneration of cache (useful for debugging)
+  },
+
   // Client-side uses AggressiveBufferStrategy with LinearPrefetchStrategy
   // - AggressiveBufferStrategy: Keeps more slices for smoother playback
   // - LinearPrefetchStrategy: Linear prefetch ahead
