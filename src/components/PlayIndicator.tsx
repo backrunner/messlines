@@ -5,9 +5,10 @@ import { PlayState } from '../constants/playlist';
 interface PlayIndicatorProps {
   playState: PlayState;
   onPlay: () => void;
+  shouldFadeOut?: boolean;
 }
 
-const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
+const PlayIndicator = ({ playState, onPlay, shouldFadeOut }: PlayIndicatorProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isFadingOut, setIsFadingOut] = useState(false);
 
@@ -19,6 +20,13 @@ const PlayIndicator = ({ playState, onPlay }: PlayIndicatorProps) => {
     }, 10);
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle external fade-out trigger
+  useEffect(() => {
+    if (shouldFadeOut) {
+      setIsFadingOut(true);
+    }
+  }, [shouldFadeOut]);
 
   const handleClick = () => {
     // Start fade out animation

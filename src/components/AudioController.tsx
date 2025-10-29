@@ -24,6 +24,7 @@ const AudioController = () => {
   const [audioControls, setAudioControls] = useState<AudioControls | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [audioContextSuspended, setAudioContextSuspended] = useState<boolean>(false);
+  const [shouldTriggerFadeOut, setShouldTriggerFadeOut] = useState<boolean>(false);
 
   // Audio reactive callbacks reference - stable reference object
   const audioReactiveCallbacks = useRef({
@@ -73,8 +74,15 @@ const AudioController = () => {
   // Handle initial play request (handle AudioContext suspension)
   const handleInitialPlay = useCallback(() => {
     if (audioControls && (playState === PlayState.STOPPED || audioContextSuspended)) {
-      setAudioContextSuspended(false); // Reset audio context suspended state
-      audioControls.togglePlayPause();
+      // Trigger fade-out animation
+      setShouldTriggerFadeOut(true);
+
+      // Wait for fade-out animation to complete before starting playback
+      setTimeout(() => {
+        setAudioContextSuspended(false); // Reset audio context suspended state
+        audioControls.togglePlayPause();
+        setShouldTriggerFadeOut(false); // Reset trigger
+      }, 400); // Match the CSS transition duration
     }
   }, [audioControls, playState, audioContextSuspended]);
 
@@ -97,7 +105,7 @@ const AudioController = () => {
       {/* Play Indicator - shows play button in top right when AudioContext is suspended */}
       {audioContextSuspended && (
         <>
-          <PlayIndicator playState={playState} onPlay={handleInitialPlay} />
+          <PlayIndicator playState={playState} onPlay={handleInitialPlay} shouldFadeOut={shouldTriggerFadeOut} />
           {console.log('✅ PlayIndicator is rendered')}
         </>
       )}
